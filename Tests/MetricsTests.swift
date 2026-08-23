@@ -9525,7 +9525,7 @@ struct MetricsTests {
 
         // MARK: Features hub catalog
 
-        expect(AppFeature.allCases.count == 53, "feature catalog has 53 features")
+        expect(AppFeature.allCases.count == 54, "feature catalog has 54 features")
         expect(Set(AppFeature.allCases.map(\.rawValue)).count == AppFeature.allCases.count,
                "feature ids are unique")
         expect(AppFeature.allCases.map(\.rawValue) == [
@@ -9535,7 +9535,7 @@ struct MetricsTests {
             "clipboardHistory", "pastePlain", "finderCutPaste", "finderRename", "shelf", "urlCleaner",
             "diskImageInstaller",
             "mixer", "soundOutputSwitcher", "micMute", "musicBlock",
-            "keepAwake", "brightness", "extraBrightness",
+            "keepAwake", "brightness", "extraBrightness", "chargeControl",
             "quickLauncher", "quickToggles", "colorPicker", "screenOCR", "cleaningMode", "mediaTools",
             "cleaner", "uninstaller", "homebrew", "appUpdates", "screenshot", "cameraPreview",
             "radialMenu", "scratchpad", "commandBar", "screenRecorder", "killProcess",
@@ -9549,9 +9549,10 @@ struct MetricsTests {
                 && (AppFeature.availabilityDefaults[AppFeature.diskImageInstaller.availabilityKey] as? Bool) == false
                 && (AppFeature.availabilityDefaults[AppFeature.focusFollowsMouse.availabilityKey] as? Bool) == false
                 && (AppFeature.availabilityDefaults[AppFeature.killProcess.availabilityKey] as? Bool) == false
+                && (AppFeature.availabilityDefaults[AppFeature.chargeControl.availabilityKey] as? Bool) == false
                 && AppFeature.allCases.filter {
                     $0 != .focusFollowsMouse && $0 != .fanControl && $0 != .diskImageInstaller
-                        && $0 != .killProcess
+                        && $0 != .killProcess && $0 != .chargeControl
                 }.allSatisfy {
                     (AppFeature.availabilityDefaults[$0.availabilityKey] as? Bool) == true
                 },
@@ -9604,6 +9605,16 @@ struct MetricsTests {
                "the disk image installer is an event-driven file feature with contextual app access")
         expect((Defaults.registeredDefaults[DefaultsKey.panelShowFanControl] as? Bool) == true,
                "installing fan control reveals its panel section by default")
+        expect(AppFeature.chargeControl.group == .energyDisplay
+                && AppFeature.chargeControl.enabledKeys == [DefaultsKey.chargeLimitEnabled]
+                && AppFeature.chargeControl.permissions.isEmpty
+                && AppFeature.chargeControl.energyProfile == .periodic
+                && !AppFeature.chargeControl.isBeta,
+               "charge limit is an energy feature that polls while it is on")
+        expect((Defaults.registeredDefaults[DefaultsKey.panelShowChargeControl] as? Bool) == true
+                && (Defaults.registeredDefaults[DefaultsKey.chargeLimitEnabled] as? Bool) == true
+                && (Defaults.registeredDefaults[DefaultsKey.chargeLimitPercent] as? Int) == 80,
+               "installing charge limit reveals the panel dial at 80 percent")
 
         for language in AppLanguage.allCases {
             let strings = FeatureStrings.diskImageInstaller(language)
@@ -9886,6 +9897,65 @@ struct MetricsTests {
                 && decodedLegacyFanSnapshot?.configuration == nil
                 && decodedLegacyFanSnapshot?.temperatures == nil,
                "fan snapshots remain compatible with an older installed helper")
+
+        expect(ChargeControlPolicy.sanitizedLimit(80) == 80
+                && ChargeControlPolicy.sanitizedLimit(20) == 20
+                && ChargeControlPolicy.sanitizedLimit(100) == 100
+                && ChargeControlPolicy.sanitizedLimit(5) == 80
+                && Defaults.sanitizedChargeLimit(12) == 80,
+               "charge limits stay inside 20...100 and fall back to 80")
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 81, limit: 80,
+                                               wasInhibited: false, mode: .limit,
+                                               family: .appleSiliconCHT) == .inhibitCharging,
+               "Apple Silicon stops charging at the cap")
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 79, limit: 80,
+                                               wasInhibited: true, mode: .limit,
+                                               family: .appleSiliconCHT) == .inhibitCharging
+                && ChargeControlPolicy.desiredGate(chargePercent: 78, limit: 80,
+                                                   wasInhibited: true, mode: .limit,
+                                                   family: .appleSiliconCHT) == .allowCharging,
+               "Apple Silicon uses a 2 percent hysteresis before charging again")
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
+                                               wasInhibited: false, mode: .limit,
+                                               family: .intelBCLM) == .inhibitCharging,
+               "Intel writes the firmware cap")
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 90, limit: 80,
+                                               wasInhibited: false, mode: .dischargeToLimit,
+                                               family: .appleSiliconCHT) == .forceDischarge,
+               "discharge-to-limit drains while the battery is above the cap")
+        let startedLow = ChargeControlPolicy.startCalibration(chargePercent: 72, savedLimit: 80)
+        expect(startedLow.phase == .chargingToFull && startedLow.savedLimit == 80,
+               "calibration charges to full first when the battery is not already at 100%")
+        expect(ChargeControlPolicy.startCalibration(chargePercent: 100, savedLimit: 80).phase
+                == .dischargingToFloor,
+               "calibration skips the first charge when the battery is already full")
+        let calNow = Date(timeIntervalSince1970: 1_000)
+        expect(ChargeControlPolicy.advanceCalibration(startedLow, chargePercent: 100, now: calNow)?.phase
+                == .dischargingToFloor,
+               "the first charge hands off to the discharge to 10%")
+        expect(ChargeControlPolicy.advanceCalibration(
+            ChargeCalibrationState(phase: .holdingAtFull, holdStartedAt: calNow, savedLimit: 80),
+            chargePercent: 100, now: calNow.addingTimeInterval(60 * 60),
+            holdDuration: 60 * 60)?.phase == .restoringLimit,
+               "the hold returns to the saved limit")
+        expect(ChargeControlPolicy.advanceCalibration(
+            ChargeCalibrationState(phase: .restoringLimit, holdStartedAt: nil, savedLimit: 80),
+            chargePercent: 80, now: calNow) == nil,
+               "calibration finishes once the battery is back at the saved limit")
+        expect(ChargeControlPolicy.restoreReason(isDischarging: true, heartbeatAge: 8)
+                && !ChargeControlPolicy.restoreReason(isDischarging: true, heartbeatAge: 2),
+               "force discharge restores if the app heartbeat is lost")
+
+        for language in AppLanguage.allCases {
+            let strings = FeatureStrings.chargeControl(language)
+            let values = Mirror(reflecting: strings).children.compactMap { $0.value as? String }
+            expect(values.count == 34 && values.allSatisfy { !$0.isEmpty },
+                   "charge control has every localized field for \(language.rawValue)")
+            expect(values.allSatisfy { !$0.contains("—") },
+                   "charge control text uses human punctuation for \(language.rawValue)")
+            expectFormat(strings.calHoldRemainingFormat, ["d"],
+                         "calibration hold format stays valid for \(language.rawValue)")
+        }
 
         let fanMigrationSuite = "com.vorssaint.tests.fan-migration.\(UUID().uuidString)"
         if let fanMigration = UserDefaults(suiteName: fanMigrationSuite) {
@@ -10419,6 +10489,9 @@ struct MetricsTests {
                        && $0.energyProfile != .inputs
                },
                "battery and quiet installs nothing that listens to input")
+        expect(FeaturePreset.battery.features.contains(.chargeControl)
+                && FeaturePreset.battery.features.contains(.monitorPower),
+               "the battery preset includes the charge limiter")
         expect(FeaturePreset.battery.features.allSatisfy {
                    !$0.permissions.contains(.accessibility)
                },
@@ -10505,11 +10578,13 @@ struct MetricsTests {
         expect(!pageVisible(.mouse, available: []),
                "the mouse page hides only with all six mouse features off")
         expect(!pageVisible(.energy, available: allFeatures.subtracting([.keepAwake, .brightness,
-                                                                         .extraBrightness])),
-               "energy hides when all three display features are off")
+                                                                         .extraBrightness, .chargeControl])),
+               "energy hides when all energy features are off")
         expect(pageVisible(.energy, available: [.extraBrightness]), "XDR alone keeps the energy page")
         expect(pageVisible(.energy, available: [.brightness]),
                "brightness control alone keeps the energy page")
+        expect(pageVisible(.energy, available: [.chargeControl]),
+               "charge limit alone keeps the energy page")
         expect(!pageVisible(.monitor, available: allFeatures.subtracting(Set(FeatureVisibilitySupport.monitorFeatures))),
                "monitor page hides with every metric off")
         expect(pageVisible(.monitor, available: [.monitorNetwork]), "one metric keeps the monitor page")
@@ -13551,6 +13626,12 @@ struct MetricsTests {
                 && !backupKeys.contains(DefaultsKey.fanControlRecoveryNeeded)
                 && !backupKeys.contains(DefaultsKey.fanControlHelperVersion),
                "fan display and cooling preferences travel while helper recovery state stays on one Mac")
+        expect(backupKeys.contains(DefaultsKey.chargeLimitEnabled)
+                && backupKeys.contains(DefaultsKey.chargeLimitPercent)
+                && backupKeys.contains(DefaultsKey.panelShowChargeControl)
+                && !backupKeys.contains(DefaultsKey.chargeControlRecoveryNeeded)
+                && !backupKeys.contains(DefaultsKey.chargeControlHelperVersion),
+               "charge limit preferences travel while helper recovery state stays on one Mac")
         expect(backupKeys.contains(DefaultsKey.screenshotSharingEnabled),
                "the temporary screenshot links preference travels with settings backup")
         expect(!backupKeys.contains(DefaultsKey.clipboardHistoryEntries)

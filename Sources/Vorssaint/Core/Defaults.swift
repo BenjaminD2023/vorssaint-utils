@@ -282,6 +282,11 @@ enum DefaultsKey {
     // automatic fan control before this marker can be cleared.
     static let fanControlRecoveryNeeded = "fanControlRecoveryNeeded"
     static let fanControlHelperVersion = "fanControlHelperVersion"
+    static let chargeLimitEnabled = "chargeLimitEnabled"
+    static let chargeLimitPercent = "chargeLimitPercent"
+    static let panelShowChargeControl = "panelShowChargeControl"
+    static let chargeControlRecoveryNeeded = "chargeControlRecoveryNeeded"
+    static let chargeControlHelperVersion = "chargeControlHelperVersion"
     // System monitor — per-metric history graphs (each independently toggleable).
     static let monitorGraphCPU = "monitorGraphCPU"
     static let monitorGraphGPU = "monitorGraphGPU"
@@ -973,6 +978,11 @@ enum Defaults {
         DefaultsKey.fanControlCurves: FanControlConfiguration.defaultCurvesStorage,
         DefaultsKey.fanControlRecoveryNeeded: false,
         DefaultsKey.fanControlHelperVersion: "",
+        DefaultsKey.chargeLimitEnabled: true,
+        DefaultsKey.chargeLimitPercent: 80,
+        DefaultsKey.panelShowChargeControl: true,
+        DefaultsKey.chargeControlRecoveryNeeded: false,
+        DefaultsKey.chargeControlHelperVersion: "",
         DefaultsKey.panelNavigationEnabled: true,
         DefaultsKey.monitorGraphCPU: true,
         DefaultsKey.monitorGraphGPU: true,
@@ -1402,6 +1412,10 @@ enum Defaults {
 
     static func sanitizedBatteryLimit(_ percent: Int) -> Int {
         allowedBatteryLimits.contains(percent) ? percent : 10
+    }
+
+    static func sanitizedChargeLimit(_ percent: Int) -> Int {
+        ChargeControlPolicy.sanitizedLimit(percent)
     }
 
     static func sanitizedKeepAwakeMouseJiggleInterval(_ minutes: Int) -> Int {

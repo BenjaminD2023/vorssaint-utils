@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Charge Limit can stop charging at a chosen level (20–100%), discharge down to
+  that level, and run a full battery calibration cycle. Off by default in
+  Features, with a dial in the menu bar panel and under Energy.
+
 ## [3.3.3-beta.2] - 2026-08-22
 
 ### Added
