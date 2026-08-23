@@ -38,7 +38,7 @@ final class ChargeControlHardware {
         let acen = Self.byteKey("ACEN", in: client)
         self.bclm = bclmKey
 
-        if let bclmKey {
+        if bclm != nil {
             chargePath = ChargePath(family: .intelBCLM, enable: [], inhibit: [])
             if let acen {
                 dischargePath = DischargePath(on: [(acen, [0x00])], off: [(acen, [0x01])])
