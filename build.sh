@@ -350,6 +350,7 @@ swiftc -O -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${BUILD_VARIAN
     Sources/Vorssaint/Services/ChargeControl/ChargeControlXPC.swift \
     Sources/Vorssaint/Services/FanControl/FanControlSupport.swift \
     Sources/Vorssaint/Services/SystemMonitor/SMCClient.swift \
+    Sources/Vorssaint/Services/Metrics/TemperatureSensorSelector.swift \
     Sources/Vorssaint/Services/ChargeControl/ChargeControlHardware.swift \
     Sources/ChargeControlHelper/main.swift \
     -o "build/$CHARGE_HELPER_ID"
