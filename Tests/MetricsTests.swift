@@ -10636,6 +10636,9 @@ struct MetricsTests {
                 && AppFeature.fanControl.settingsDestination
                 == FeatureSettingsDestination(.monitor, sectionAnchor: .fanControl),
                "shared monitor destinations distinguish the dedicated fan controls")
+        expect(AppFeature.chargeControl.settingsDestination
+                == FeatureSettingsDestination(.energy, sectionAnchor: .chargeControl),
+               "charge limit lands on the Energy page")
         let settingsRouter = SettingsRouter.shared
         var settingsRequestCount = 0
         var settingsRequestsPublishedReady = true

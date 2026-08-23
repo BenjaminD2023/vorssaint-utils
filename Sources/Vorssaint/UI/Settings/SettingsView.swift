@@ -423,6 +423,7 @@ struct EnergySettings: View {
                     ChargeControlCardContent(compact: false)
                     SettingsCaptionText(strings.enableCaption)
                 }
+                .settingsSectionAnchor(.chargeControl)
             }
             if AppFeature.keepAwake.isAvailable {
                 Section(l10n.s.sessionSection) {
