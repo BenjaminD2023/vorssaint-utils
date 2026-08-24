@@ -204,6 +204,9 @@ struct MetricDetailView: View {
                 }
                 Spacer(minLength: 0)
             }
+            if kind == .battery, PowerSampler.hasInternalBattery {
+                ChargeLimitPowerActions()
+            }
             graph
             if kind == .battery, PowerSampler.hasInternalBattery {
                 ChargeLimitInlineAdjuster()

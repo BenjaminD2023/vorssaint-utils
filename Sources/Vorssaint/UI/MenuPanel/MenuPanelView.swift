@@ -257,7 +257,7 @@ struct MenuPanelView: View {
         case .keepAwake: return 250
         case .brightness: return 140
         case .mixer: return 250
-        case .system: return 460
+        case .system: return 500
         case .network: return 190
         case .disk: return 360
         case .power: return 170
@@ -275,7 +275,7 @@ struct MenuPanelView: View {
         case .cpu, .gpu, .memory: return 430
         case .network: return 330
         case .disk: return 360
-        case .battery: return 540
+        case .battery: return 580
         case .power: return 360
         case .fan: return 240
         }

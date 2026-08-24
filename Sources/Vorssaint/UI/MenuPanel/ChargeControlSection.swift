@@ -73,30 +73,7 @@ struct ChargeLimitInlineAdjuster: View {
 
     @ViewBuilder
     private var footer: some View {
-        if service.accessState == .notRegistered {
-            Button(strings.allowControl) {
-                ensureFeatureAvailable()
-                service.authorize()
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(ChargeLimitPalette.lime(for: colorScheme))
-            .controlSize(.small)
-            .frame(maxWidth: .infinity)
-            Text(strings.approvalCaption)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if service.accessState == .requiresApproval {
-            Button(strings.openSettings, action: service.authorize)
-                .buttonStyle(.borderedProminent)
-                .tint(ChargeLimitPalette.lime(for: colorScheme))
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
-            Text(strings.approvalCaption)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if service.accessState == .enabled {
+        if service.accessState == .enabled {
             HStack(spacing: 8) {
                 Toggle(strings.enableToggle, isOn: Binding(
                     get: { service.enabled },
@@ -114,12 +91,36 @@ struct ChargeLimitInlineAdjuster: View {
                     .foregroundStyle(statusColor)
                     .lineLimit(1)
             }
-            ChargeLimitPowerActions()
-        } else if let message = errorMessage {
-            Text(message)
+        } else if service.accessState == .requiresApproval {
+            Button(strings.openSettings, action: service.authorize)
+                .buttonStyle(.borderedProminent)
+                .tint(ChargeLimitPalette.lime(for: colorScheme))
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+            Text(strings.approvalCaption)
                 .font(.system(size: 10))
-                .foregroundStyle(.red)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Button(strings.allowControl) {
+                ensureFeatureAvailable()
+                service.authorize()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(ChargeLimitPalette.lime(for: colorScheme))
+            .controlSize(.small)
+            .frame(maxWidth: .infinity)
+            if let message = errorMessage {
+                Text(message)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(strings.approvalCaption)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -178,7 +179,7 @@ struct ChargeLimitInlineAdjuster: View {
 
 /// Discharge and Top up while the adapter is connected. Discharge drains to
 /// the saved limit; Top up temporarily charges to 100% and then restores it.
-private struct ChargeLimitPowerActions: View {
+struct ChargeLimitPowerActions: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var service = ChargeControlService.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -188,40 +189,43 @@ private struct ChargeLimitPowerActions: View {
     }
 
     var body: some View {
-        if service.accessState == .enabled,
-           service.enabled,
-           service.externalConnected,
-           !service.isCalibrating,
-           showDischarge || showTopUp {
-            HStack(spacing: 8) {
-                if showDischarge {
-                    Button(service.isDischargingToLimit ? strings.stopDischarge : strings.discharge) {
-                        if service.isDischargingToLimit { service.stopDischarge() }
-                        else { service.startDischargeToLimit() }
+        Group {
+            if service.accessState == .enabled,
+               service.enabled,
+               service.externalConnected,
+               !service.isCalibrating,
+               showDischarge || showTopUp {
+                HStack(spacing: 8) {
+                    if showDischarge {
+                        Button(service.isDischargingToLimit ? strings.stopDischarge : strings.discharge) {
+                            if service.isDischargingToLimit { service.stopDischarge() }
+                            else { service.startDischargeToLimit() }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(service.isDischargingToLimit
+                              ? ChargeLimitPalette.discharge(for: colorScheme)
+                              : nil)
+                        .controlSize(.small)
+                        .disabled(service.isWorking)
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(service.isDischargingToLimit
-                          ? ChargeLimitPalette.discharge(for: colorScheme)
-                          : nil)
-                    .controlSize(.small)
-                    .disabled(service.isWorking)
-                    .frame(maxWidth: .infinity)
-                }
-                if showTopUp {
-                    Button(service.isToppingUp ? strings.stopTopUp : strings.topUp) {
-                        if service.isToppingUp { service.stopTopUp() }
-                        else { service.startTopUp() }
+                    if showTopUp {
+                        Button(service.isToppingUp ? strings.stopTopUp : strings.topUp) {
+                            if service.isToppingUp { service.stopTopUp() }
+                            else { service.startTopUp() }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(service.isToppingUp
+                              ? ChargeLimitPalette.charging(for: colorScheme)
+                              : nil)
+                        .controlSize(.small)
+                        .disabled(service.isWorking)
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(service.isToppingUp
-                          ? ChargeLimitPalette.charging(for: colorScheme)
-                          : nil)
-                    .controlSize(.small)
-                    .disabled(service.isWorking)
-                    .frame(maxWidth: .infinity)
                 }
             }
         }
+        .onAppear { service.panelDidAppear() }
     }
 
     private var showDischarge: Bool {
@@ -339,19 +343,7 @@ struct ChargeControlCardContent: View {
 
     @ViewBuilder
     private var actions: some View {
-        if service.accessState == .notRegistered {
-            Button(strings.allowControl, action: service.authorize)
-                .buttonStyle(.borderedProminent)
-                .tint(ChargeLimitPalette.lime(for: colorScheme))
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
-        } else if service.accessState == .requiresApproval {
-            Button(strings.openSettings, action: service.authorize)
-                .buttonStyle(.borderedProminent)
-                .tint(ChargeLimitPalette.lime(for: colorScheme))
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
-        } else if service.accessState == .enabled {
+        if service.accessState == .enabled {
             Toggle(strings.enableToggle, isOn: Binding(
                 get: { service.enabled },
                 set: { service.setEnabled($0) }
@@ -362,6 +354,18 @@ struct ChargeControlCardContent: View {
             if service.enabled {
                 ChargeLimitPowerActions()
             }
+        } else if service.accessState == .requiresApproval {
+            Button(strings.openSettings, action: service.authorize)
+                .buttonStyle(.borderedProminent)
+                .tint(ChargeLimitPalette.lime(for: colorScheme))
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+        } else {
+            Button(strings.allowControl, action: service.authorize)
+                .buttonStyle(.borderedProminent)
+                .tint(ChargeLimitPalette.lime(for: colorScheme))
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
         }
     }
 
