@@ -8611,6 +8611,42 @@ struct MetricsTests {
                                                       commitWhenReady: false,
                                                       matchesShortcut: false) == .handleActiveSession,
                "App Switcher still routes repeated shortcuts and keys from a session that just became active")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(appsShortcut: .switcherDefault,
+                                                       windowShortcut: .switcherWindowDefault)
+               == Set(SwitcherNativeSymbolicHotKey.allCases),
+               "the default App Switcher shortcuts take over ⌘Tab, ⌘⇧Tab and ⌘`")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    appsShortcut: GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.option]),
+                    windowShortcut: GlobalShortcut(keyCode: Int64(kVK_ANSI_Grave), modifiers: [.option]))
+               .isEmpty,
+               "shortcuts that are not ⌘Tab leave the system switcher in place")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    appsShortcut: .switcherDefault,
+                    windowShortcut: GlobalShortcut(keyCode: Int64(kVK_ANSI_Grave), modifiers: [.option]))
+               == [.commandTab, .commandShiftTab],
+               "⌘Tab takeover also covers the system reverse switcher")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    appsShortcut: GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.option]),
+                    windowShortcut: .switcherWindowDefault)
+               == [.commandKeyAboveTab],
+               "the default window shortcut takes over ⌘` without touching ⌘Tab")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    appsShortcut: GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.command, .shift]),
+                    windowShortcut: .switcherWindowDefault)
+               == Set(SwitcherNativeSymbolicHotKey.allCases),
+               "assigning ⌘⇧Tab still disables the system switcher pair")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    appsShortcut: GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.command, .option]),
+                    windowShortcut: GlobalShortcut(keyCode: Int64(kVK_ANSI_A), modifiers: [.command]))
+               .isEmpty,
+               "⌘⌥Tab is not the system switcher")
+        expect(SwitcherSupport.nativeHotkeyTransition(from: [], to: [.commandTab, .commandShiftTab])
+               == SwitcherNativeHotkeyTransition(suppress: [.commandTab, .commandShiftTab], restore: [])
+               && SwitcherSupport.nativeHotkeyTransition(
+                    from: Set(SwitcherNativeSymbolicHotKey.allCases), to: [])
+               == SwitcherNativeHotkeyTransition(suppress: [],
+                                                 restore: Set(SwitcherNativeSymbolicHotKey.allCases)),
+               "native hotkey updates only switch off or restore the keys that actually changed")
         expect(SwitcherSupport.isCurrentActivationGeneration(12, current: 12)
                && !SwitcherSupport.isCurrentActivationGeneration(11, current: 12),
                "App Switcher ignores retries left by an older activation")

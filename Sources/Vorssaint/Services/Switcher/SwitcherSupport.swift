@@ -45,6 +45,20 @@ enum SwitcherPendingKeyDecision: Equatable {
     case cancelAndSwallow
 }
 
+/// Dock's identifiers for the system app switcher and "next window" shortcuts.
+/// Session event taps cannot preempt these; they have to be switched off for as
+/// long as Vorssaint's own shortcut occupies the same keys.
+enum SwitcherNativeSymbolicHotKey: Int32, CaseIterable, Hashable {
+    case commandTab = 1
+    case commandShiftTab = 2
+    case commandKeyAboveTab = 6
+}
+
+struct SwitcherNativeHotkeyTransition: Equatable {
+    let suppress: Set<SwitcherNativeSymbolicHotKey>
+    let restore: Set<SwitcherNativeSymbolicHotKey>
+}
+
 /// Which running apps earn an entry of their own when they have no window the
 /// switcher can show. The switcher lists windows, so an app that closed all of
 /// them disappears from it while the system switcher still offers it.
@@ -1016,6 +1030,47 @@ enum SwitcherSupport {
         guard hasPendingStart, !matchesShortcut else { return .routeShortcut }
         return commitWhenReady ? .cancelAndSwallow : .swallow
     }
+
+    /// Dock handles ⌘Tab / ⌘⇧Tab / ⌘` as symbolic hotkeys, so swallowing Tab
+    /// in a session tap is not enough: the system switcher still appears unless
+    /// those hotkeys are off while Vorssaint owns the same combinations.
+    static func nativeHotkeysToSuppress(appsShortcut: GlobalShortcut,
+                                        windowShortcut: GlobalShortcut) -> Set<SwitcherNativeSymbolicHotKey> {
+        var ids: Set<SwitcherNativeSymbolicHotKey> = []
+        if collidesWithCommandTab(appsShortcut) || collidesWithCommandTab(windowShortcut) {
+            ids.insert(.commandTab)
+            ids.insert(.commandShiftTab)
+        }
+        if collidesWithCommandKeyAboveTab(appsShortcut) || collidesWithCommandKeyAboveTab(windowShortcut) {
+            ids.insert(.commandKeyAboveTab)
+        }
+        return ids
+    }
+
+    static func nativeHotkeyTransition(from current: Set<SwitcherNativeSymbolicHotKey>,
+                                       to desired: Set<SwitcherNativeSymbolicHotKey>) -> SwitcherNativeHotkeyTransition {
+        SwitcherNativeHotkeyTransition(suppress: desired.subtracting(current),
+                                       restore: current.subtracting(desired))
+    }
+
+    private static func collidesWithCommandTab(_ shortcut: GlobalShortcut) -> Bool {
+        shortcut.keyCode == nativeCommandTabKeyCode && usesCommandWithOptionalShift(shortcut)
+    }
+
+    private static func collidesWithCommandKeyAboveTab(_ shortcut: GlobalShortcut) -> Bool {
+        shortcut.keyCode == nativeCommandKeyAboveTabKeyCode && usesCommandWithOptionalShift(shortcut)
+    }
+
+    /// ⌘ or ⌘⇧, and nothing else: extra modifiers are a different shortcut.
+    private static func usesCommandWithOptionalShift(_ shortcut: GlobalShortcut) -> Bool {
+        shortcut.modifiers.contains(.command)
+            && shortcut.modifiers.subtracting([.command, .shift]).isEmpty
+    }
+
+    /// kVK_Tab. Named here so this file stays free of Carbon.
+    private static let nativeCommandTabKeyCode: Int64 = 48
+    /// kVK_ANSI_Grave, the key above Tab on a US keyboard.
+    private static let nativeCommandKeyAboveTabKeyCode: Int64 = 50
 
     static func isCurrentActivationGeneration(_ scheduled: UInt64,
                                               current: UInt64) -> Bool {
