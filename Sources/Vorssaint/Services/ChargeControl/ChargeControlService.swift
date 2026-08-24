@@ -39,6 +39,7 @@ final class ChargeControlService: ObservableObject {
     private var requestInFlight = false
     private var requestGeneration = 0
     private var registrationAttemptedVersion: String?
+    private var didRequestAuthorization = false
     private var sleepAssertion: IOPMAssertionID = 0
     private var lastAppliedGate: ChargeControlGate?
 
@@ -110,6 +111,9 @@ final class ChargeControlService: ObservableObject {
     func panelDidAppear() {
         panelIsVisible = true
         refresh()
+        if AppFeature.chargeControl.isAvailable, hasBattery, enabled {
+            ensureHelperForControl()
+        }
         startTimerIfNeeded()
     }
 
@@ -139,9 +143,7 @@ final class ChargeControlService: ObservableObject {
         case .enabled:
             requestStatus()
             evaluate()
-        case .unavailable:
-            error = .helperUnavailable
-        case .notRegistered:
+        case .unavailable, .notRegistered:
             isWorking = true
             do {
                 try Self.appService.register()
@@ -154,6 +156,8 @@ final class ChargeControlService: ObservableObject {
                 } else if accessState == .enabled {
                     requestStatus()
                     evaluate()
+                } else {
+                    self.error = .helperUnavailable
                 }
             } catch {
                 isWorking = false
@@ -168,10 +172,24 @@ final class ChargeControlService: ObservableObject {
         startTimerIfNeeded()
     }
 
+    /// Register the helper once when the user sets a limit. Login Items
+    /// approval is a system sheet; repeating it on every slider tick is noise.
+    private func ensureHelperForControl() {
+        refreshAccessState()
+        guard accessState != .enabled else { return }
+        guard !didRequestAuthorization else { return }
+        didRequestAuthorization = true
+        authorize()
+    }
+
     func setEnabled(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: DefaultsKey.chargeLimitEnabled)
         self.enabled = enabled
-        if !enabled { cancelTransientModes() }
+        if !enabled {
+            cancelTransientModes()
+        } else {
+            ensureHelperForControl()
+        }
         evaluate()
     }
 
@@ -179,6 +197,7 @@ final class ChargeControlService: ObservableObject {
         let cap = ChargeControlPolicy.sanitizedLimit(percent)
         UserDefaults.standard.set(cap, forKey: DefaultsKey.chargeLimitPercent)
         limitPercent = cap
+        ensureHelperForControl()
         evaluate()
     }
 
@@ -615,6 +634,10 @@ final class ChargeControlService: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: ChargeControlPolicy.pollInterval, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.now = Date()
+            if self.accessState != .enabled {
+                self.refreshAccessState()
+                if self.accessState == .enabled { self.requestStatus() }
+            }
             if self.appliedGate == .forceDischarge { self.heartbeat() }
             self.evaluate()
         }

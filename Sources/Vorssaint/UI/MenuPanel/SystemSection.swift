@@ -370,6 +370,9 @@ struct SystemSection: View {
                               showsZeroBaseline: true)
                         .frame(height: 22)
                 }
+                if !editing {
+                    ChargeLimitPowerActions()
+                }
                 energyAppsHeader
                 breakdownList(for: .energy)
             }
