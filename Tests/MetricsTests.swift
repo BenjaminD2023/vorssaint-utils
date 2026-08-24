@@ -16253,11 +16253,23 @@ struct MetricsTests {
         for language in AppLanguage.allCases {
             let commandBarValues = Mirror(reflecting: FeatureStrings.commandBar(language)).children
                 .compactMap { $0.value as? String }
-            expect(commandBarValues.count == 146 && commandBarValues.allSatisfy { !$0.isEmpty },
+            expect(commandBarValues.count == 147 && commandBarValues.allSatisfy { !$0.isEmpty },
                    "every command bar string is set for \(language.rawValue)")
             expect(commandBarValues.allSatisfy { !$0.contains("—") },
                    "no em-dash in visible command bar strings (\(language.rawValue))")
         }
+
+        // A key glyph in front of a button label reads as that button's
+        // shortcut, so neither command bar action button carries one.
+        let commandBarSettingsSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/UI/Settings/CommandBarSettings.swift",
+            encoding: .utf8)) ?? ""
+        expect(!commandBarSettingsSource.contains("Label(text.openButton, systemImage:")
+                && !commandBarSettingsSource.contains("Label(text.resetPositionButton, systemImage:"),
+               "neither command bar action button wears an icon")
+        expect(commandBarSettingsSource.contains("Toggle(text.shortcutToggle,")
+                && !commandBarSettingsSource.contains("l10n.s.quickToolShortcutToggle"),
+               "the command bar shortcut toggle says what the shortcut opens")
         for language in AppLanguage.allCases {
             let recordingShareValues = Mirror(
                 reflecting: FeatureStrings.recorderShare(language)).children
@@ -16771,6 +16783,30 @@ struct MetricsTests {
                 ScreenCaptureTool.allCases.contains { $0.dedicatedShortcut?.role == role }
                },
                "no capture tool's shortcut row is left without something to register it")
+        // MARK: A failed removal explains itself where it failed
+        // A green tick above "some items couldn't be moved to the Trash" told
+        // nobody that sandboxed app data needs Full Disk Access, and the note
+        // offering the permission only ever appeared before an app was picked.
+        expect(UninstallerSupport.doneSymbol(hasLeftovers: false) == "checkmark.circle.fill",
+               "a removal that took everything ends on a tick")
+        expect(UninstallerSupport.doneSymbol(hasLeftovers: true)
+                != UninstallerSupport.doneSymbol(hasLeftovers: false),
+               "a removal that left something behind does not end on the same mark")
+        // Both done states have to route through that decision and name what
+        // survived; neither may spell a tick of its own.
+        for path in ["Sources/Vorssaint/UI/Uninstall/UninstallerView.swift",
+                     "Sources/Vorssaint/UI/MenuPanel/PanelUninstallerView.swift"] {
+            let source = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            expect(source.contains("UninstallFailureNote(items:"),
+                   "\(path) names what the removal left behind")
+            expect(!source.contains("\"checkmark.circle.fill\""),
+                   "\(path) takes its done symbol from UninstallerSupport")
+        }
+        let sharedUISource = (try? String(contentsOfFile: "Sources/Vorssaint/UI/SharedUI.swift",
+                                          encoding: .utf8)) ?? ""
+        expect(sharedUISource.contains("uninstallerFailedNeedsFDA"),
+               "the failure note explains the permission the removal needed")
+
         // MARK: Private file store
 
         let privateRoot = FileManager.default.temporaryDirectory
