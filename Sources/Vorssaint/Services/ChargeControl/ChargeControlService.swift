@@ -73,6 +73,11 @@ final class ChargeControlService: ObservableObject {
         return false
     }
 
+    var isToppingUp: Bool {
+        if case .topUp = mode { return true }
+        return false
+    }
+
     var holdRemainingSeconds: TimeInterval? {
         guard case .calibration(let state) = mode else { return nil }
         return ChargeControlPolicy.holdRemaining(state: state, now: now)
@@ -193,6 +198,21 @@ final class ChargeControlService: ObservableObject {
         evaluate()
     }
 
+    func startTopUp() {
+        guard limitPercent < ChargeControlPolicy.maximumLimit,
+              (chargePercent ?? 0) < ChargeControlPolicy.maximumLimit else { return }
+        guard accessState == .enabled else { authorize(); return }
+        mode = .topUp
+        releaseSleepAssertion()
+        evaluate()
+    }
+
+    func stopTopUp() {
+        guard isToppingUp else { return }
+        mode = .limit
+        evaluate()
+    }
+
     func startCalibration() {
         guard profile?.supportsDischarge == true, externalConnected else { return }
         guard accessState == .enabled else { authorize(); return }
@@ -258,9 +278,10 @@ final class ChargeControlService: ObservableObject {
         sampleBattery()
         advanceCalibrationIfNeeded()
         settleDischargeIfNeeded()
+        settleTopUpIfNeeded()
 
         let active = AppFeature.chargeControl.isAvailable && hasBattery && enabled
-        let needsControl = active || isCalibrating || isDischargingToLimit
+        let needsControl = active || isCalibrating || isDischargingToLimit || isToppingUp
         guard needsControl else {
             if lastAppliedGate != .allowCharging || appliedGate != .allowCharging {
                 applyGate(.allowCharging)
@@ -299,10 +320,18 @@ final class ChargeControlService: ObservableObject {
         }
     }
 
+    private func settleTopUpIfNeeded() {
+        guard isToppingUp, let charge = chargePercent else { return }
+        if charge >= ChargeControlPolicy.maximumLimit {
+            mode = .limit
+        }
+    }
+
     private func applyGate(_ gate: ChargeControlGate) {
         guard accessState == .enabled, !requestInFlight else { return }
         let generation = beginRequest()
-        let request = ChargeControlRequest(gate: gate, limitPercent: limitPercent)
+        let requestLimit = isToppingUp ? ChargeControlPolicy.maximumLimit : limitPercent
+        let request = ChargeControlRequest(gate: gate, limitPercent: requestLimit)
         if gate != .allowCharging {
             UserDefaults.standard.set(true, forKey: DefaultsKey.chargeControlRecoveryNeeded)
         }
@@ -569,7 +598,7 @@ final class ChargeControlService: ObservableObject {
     }
 
     private func cancelTransientModes() {
-        if isCalibrating || isDischargingToLimit {
+        if isCalibrating || isDischargingToLimit || isToppingUp {
             mode = .limit
             releaseSleepAssertion()
         }
@@ -577,7 +606,7 @@ final class ChargeControlService: ObservableObject {
 
     private func startTimerIfNeeded() {
         let active = AppFeature.chargeControl.isAvailable && hasBattery
-            && (enabled || isCalibrating || isDischargingToLimit)
+            && (enabled || isCalibrating || isDischargingToLimit || isToppingUp)
         guard panelIsVisible || active
                 || UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded) else { return }
         guard timer == nil else { return }
@@ -592,7 +621,7 @@ final class ChargeControlService: ObservableObject {
     private func stopIdleWorkIfPossible() {
         guard !panelIsVisible,
               !(AppFeature.chargeControl.isAvailable && hasBattery && enabled),
-              !isCalibrating, !isDischargingToLimit,
+              !isCalibrating, !isDischargingToLimit, !isToppingUp,
               !UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded) else { return }
         timer?.invalidate()
         timer = nil

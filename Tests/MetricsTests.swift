@@ -9923,6 +9923,13 @@ struct MetricsTests {
                                                wasInhibited: false, mode: .dischargeToLimit,
                                                family: .appleSiliconCHT) == .forceDischarge,
                "discharge-to-limit drains while the battery is above the cap")
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 90, limit: 80,
+                                               wasInhibited: true, mode: .topUp,
+                                               family: .appleSiliconCHT) == .allowCharging
+                && ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
+                                                   wasInhibited: true, mode: .topUp,
+                                                   family: .intelBCLM) == .allowCharging,
+               "top up charges past the cap until 100%")
         let startedLow = ChargeControlPolicy.startCalibration(chargePercent: 72, savedLimit: 80)
         expect(startedLow.phase == .chargingToFull && startedLow.savedLimit == 80,
                "calibration charges to full first when the battery is not already at 100%")
@@ -9949,7 +9956,7 @@ struct MetricsTests {
         for language in AppLanguage.allCases {
             let strings = FeatureStrings.chargeControl(language)
             let values = Mirror(reflecting: strings).children.compactMap { $0.value as? String }
-            expect(values.count == 34 && values.allSatisfy { !$0.isEmpty },
+            expect(values.count == 38 && values.allSatisfy { !$0.isEmpty },
                    "charge control has every localized field for \(language.rawValue)")
             expect(values.allSatisfy { !$0.contains("—") },
                    "charge control text uses human punctuation for \(language.rawValue)")

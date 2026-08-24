@@ -114,6 +114,7 @@ struct ChargeLimitInlineAdjuster: View {
                     .foregroundStyle(statusColor)
                     .lineLimit(1)
             }
+            ChargeLimitPowerActions()
         } else if let message = errorMessage {
             Text(message)
                 .font(.system(size: 10))
@@ -133,6 +134,7 @@ struct ChargeLimitInlineAdjuster: View {
             }
         }
         if service.isDischargingToLimit { return strings.discharging }
+        if service.isToppingUp { return strings.toppingUp }
         if service.appliedGate == .inhibitCharging { return strings.holding }
         if service.isCharging { return strings.charging }
         if !service.externalConnected { return strings.onBattery }
@@ -143,10 +145,12 @@ struct ChargeLimitInlineAdjuster: View {
         if service.appliedGate == .forceDischarge || service.isDischargingToLimit {
             return ChargeLimitPalette.discharge(for: colorScheme)
         }
+        if service.isToppingUp || service.isCharging {
+            return ChargeLimitPalette.charging(for: colorScheme)
+        }
         if service.appliedGate == .inhibitCharging {
             return ChargeLimitPalette.lime(for: colorScheme)
         }
-        if service.isCharging { return ChargeLimitPalette.charging(for: colorScheme) }
         return .secondary
     }
 
@@ -169,6 +173,66 @@ struct ChargeLimitInlineAdjuster: View {
             FeatureRuntime.shared.setAvailable(.chargeControl, true)
             service.panelDidAppear()
         }
+    }
+}
+
+/// Discharge and Top up while the adapter is connected. Discharge drains to
+/// the saved limit; Top up temporarily charges to 100% and then restores it.
+private struct ChargeLimitPowerActions: View {
+    @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var service = ChargeControlService.shared
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var strings: ChargeControlFeatureStrings {
+        FeatureStrings.chargeControl(l10n.language)
+    }
+
+    var body: some View {
+        if service.accessState == .enabled,
+           service.enabled,
+           service.externalConnected,
+           !service.isCalibrating,
+           showDischarge || showTopUp {
+            HStack(spacing: 8) {
+                if showDischarge {
+                    Button(service.isDischargingToLimit ? strings.stopDischarge : strings.discharge) {
+                        if service.isDischargingToLimit { service.stopDischarge() }
+                        else { service.startDischargeToLimit() }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(service.isDischargingToLimit
+                          ? ChargeLimitPalette.discharge(for: colorScheme)
+                          : nil)
+                    .controlSize(.small)
+                    .disabled(service.isWorking)
+                    .frame(maxWidth: .infinity)
+                }
+                if showTopUp {
+                    Button(service.isToppingUp ? strings.stopTopUp : strings.topUp) {
+                        if service.isToppingUp { service.stopTopUp() }
+                        else { service.startTopUp() }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(service.isToppingUp
+                          ? ChargeLimitPalette.charging(for: colorScheme)
+                          : nil)
+                    .controlSize(.small)
+                    .disabled(service.isWorking)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    private var showDischarge: Bool {
+        service.profile?.supportsDischarge == true
+            && ((service.chargePercent ?? 0) > service.limitPercent || service.isDischargingToLimit)
+    }
+
+    private var showTopUp: Bool {
+        (service.limitPercent < ChargeControlPolicy.maximumLimit
+            && (service.chargePercent ?? 0) < ChargeControlPolicy.maximumLimit)
+            || service.isToppingUp
     }
 }
 
@@ -295,15 +359,8 @@ struct ChargeControlCardContent: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .disabled(service.isCalibrating)
-            if service.enabled, canDischargeToLimit {
-                Button(service.isDischargingToLimit ? strings.stopDischarge : strings.dischargeToLimit) {
-                    if service.isDischargingToLimit { service.stopDischarge() }
-                    else { service.startDischargeToLimit() }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(service.isCalibrating || service.isWorking)
-                .frame(maxWidth: .infinity)
+            if service.enabled {
+                ChargeLimitPowerActions()
             }
         }
     }
@@ -353,10 +410,6 @@ struct ChargeControlCardContent: View {
         }
     }
 
-    private var canDischargeToLimit: Bool {
-        service.profile?.supportsDischarge == true && (service.chargePercent ?? 0) > service.limitPercent
-    }
-
     private var canStartCalibration: Bool {
         service.accessState == .enabled
             && service.profile?.supportsDischarge == true
@@ -366,13 +419,14 @@ struct ChargeControlCardContent: View {
 
     private var headerSymbol: String {
         if service.isDischargingToLimit || service.appliedGate == .forceDischarge { return "battery.25" }
-        if service.isCharging { return "battery.100.bolt" }
+        if service.isCharging || service.isToppingUp { return "battery.100.bolt" }
         return "battery.75percent"
     }
 
     private var statusText: String {
         if service.isCalibrating, let phase = service.calibrationPhase { return phaseText(phase) }
         if service.isDischargingToLimit { return strings.discharging }
+        if service.isToppingUp { return strings.toppingUp }
         if !service.externalConnected { return strings.onBattery }
         if service.appliedGate == .inhibitCharging { return strings.holding }
         if service.isCharging { return strings.charging }
@@ -383,8 +437,10 @@ struct ChargeControlCardContent: View {
         if service.appliedGate == .forceDischarge || service.isDischargingToLimit {
             return ChargeLimitPalette.discharge(for: colorScheme)
         }
+        if service.isToppingUp || service.isCharging {
+            return ChargeLimitPalette.charging(for: colorScheme)
+        }
         if service.appliedGate == .inhibitCharging { return ChargeLimitPalette.lime(for: colorScheme) }
-        if service.isCharging { return ChargeLimitPalette.charging(for: colorScheme) }
         return .secondary
     }
 

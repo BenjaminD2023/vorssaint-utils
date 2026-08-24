@@ -32,6 +32,7 @@ struct ChargeCalibrationState: Codable, Equatable, Sendable {
 enum ChargeControlMode: Equatable, Sendable {
     case limit
     case dischargeToLimit
+    case topUp
     case calibration(ChargeCalibrationState)
 }
 
@@ -110,6 +111,8 @@ enum ChargeControlPolicy {
             return calibrationGate(chargePercent: chargePercent, state: state)
         case .dischargeToLimit:
             return chargePercent > cap ? .forceDischarge : .inhibitCharging
+        case .topUp:
+            return .allowCharging
         case .limit:
             break
         }
