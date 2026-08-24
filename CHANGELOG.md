@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Window edge snapping fills the screen when a window is dragged further up
+  past the upper-half zone, and the live preview follows.
+
 ## [3.3.3-beta.2] - 2026-08-22
 
 ### Added
