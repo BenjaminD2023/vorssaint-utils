@@ -44,6 +44,7 @@ private extension View {
 /// thumbnails, hover/keyboard selection and a springy highlight.
 struct SwitcherView: View {
     @EnvironmentObject private var switcher: AppSwitcher
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var l10n = L10n.shared
     @AppStorage(DefaultsKey.switcherIconRowMode) private var iconRowMode = false
     @AppStorage(DefaultsKey.switcherSimpleMode) private var simpleMode = false
@@ -509,6 +510,8 @@ struct SwitcherView: View {
         .offset(x: overflow ? iconRowOverflowOffset(tileWidth: tileWidth) : 0)
         .animation(.easeOut(duration: SwitcherSupport.iconRowEdgeHoverAnimationDuration),
                    value: switcher.iconRowFirstVisibleIndex)
+        .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.62),
+                   value: switcher.iconRowTerminalBounceDirection)
         .frame(width: switcher.iconRowLayout.appRowContentWidth,
                height: SwitcherIconRowLayout.rowHeight,
                alignment: .leading)
@@ -518,7 +521,8 @@ struct SwitcherView: View {
 
     private func iconRowOverflowOffset(tileWidth: CGFloat) -> CGFloat {
         let first = switcher.iconRowFirstVisibleIndex
-        return -CGFloat(first) * (tileWidth + SwitcherIconRowLayout.spacing)
+        let bounce = reduceMotion ? 0 : -CGFloat(switcher.iconRowTerminalBounceDirection) * 7
+        return -CGFloat(first) * (tileWidth + SwitcherIconRowLayout.spacing) + bounce
     }
 
     private var selectedWindow: SwitcherItem? {
