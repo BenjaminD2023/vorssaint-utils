@@ -231,27 +231,6 @@ enum MenuBarSegment {
     case separator
 }
 
-/// Green while charging (numeric battery values only — native bars already
-/// show a lightning bolt) and yellow while Low Power Mode is on.
-enum MenuBarBatteryDot: Equatable {
-    case charging, lowPower
-
-    var color: NSColor {
-        switch self {
-        case .charging: return .systemGreen
-        case .lowPower: return .systemYellow
-        }
-    }
-
-    static func current(isCharging: Bool,
-                        lowPowerMode: Bool,
-                        nativeChargingIcon: Bool = false) -> MenuBarBatteryDot? {
-        if isCharging && !nativeChargingIcon { return .charging }
-        if lowPowerMode { return .lowPower }
-        return nil
-    }
-}
-
 enum MenuBarBlockStyle {
     case readable, dense
 }
