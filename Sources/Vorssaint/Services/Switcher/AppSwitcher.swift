@@ -56,6 +56,8 @@ final class AppSwitcher: ObservableObject {
     /// First icon currently shown in an overflow row. The row steps this
     /// index by one when the pointer parks on the last visible icon.
     @Published private(set) var iconRowFirstVisibleIndex = 0
+    /// Outward direction for the small one-shot nudge at a terminal edge.
+    @Published private(set) var iconRowTerminalBounceDirection = 0
     @Published private(set) var searchQuery = ""
     /// True once S pinned the search field open. While set, releasing the
     /// session's modifier no longer commits — search text can then be typed
@@ -116,6 +118,7 @@ final class AppSwitcher: ObservableObject {
     /// Fires while the pointer stays on the last visible overflow icon.
     private var iconRowEdgeHoverWork: DispatchWorkItem?
     private var iconRowEdgeHoverIndex: Int?
+    private var iconRowLastBouncedIndex: Int?
 
     /// The on-screen window when the current session opened — becomes the
     /// second-most-recent window on commit, so a flick toggles straight back.
@@ -947,8 +950,11 @@ final class AppSwitcher: ObservableObject {
     /// Icon-row hover. Selects the tile, then only the last visible overflow
     /// icon may start the one-by-one slide.
     func hoverSelectIconRow(index: Int) {
+        let alreadyBounced = iconRowIndex(forSelectionIndex: index) == iconRowLastBouncedIndex
+            && iconRowLastBouncedIndex != nil
+        if !alreadyBounced { iconRowLastBouncedIndex = nil }
         hoverSelect(index: index)
-        guard hoverAnchor == nil else { return }
+        guard hoverAnchor == nil, !alreadyBounced else { return }
         beginIconRowEdgeHoverIfNeeded(at: index)
     }
 
@@ -1263,6 +1269,8 @@ final class AppSwitcher: ObservableObject {
         hoverAnchor = nil
         cancelIconRowEdgeHover()
         iconRowFirstVisibleIndex = 0
+        iconRowTerminalBounceDirection = 0
+        iconRowLastBouncedIndex = nil
         userNavigated = false
         sessionStartWindowID = nil
         sessionSourceContext = nil
@@ -1425,7 +1433,7 @@ final class AppSwitcher: ObservableObject {
     private func beginIconRowEdgeHoverIfNeeded(at selectionIndex: Int) {
         guard usesIconRowLayout,
               let iconIndex = iconRowIndex(forSelectionIndex: selectionIndex),
-              SwitcherSupport.iconRowEdgeHoverDelta(
+              SwitcherSupport.iconRowEdgeHoverDirection(
                 hoveredIndex: iconIndex,
                 firstVisibleIndex: iconRowFirstVisibleIndex,
                 visibleCount: iconRowLayout.visibleIconCount,
@@ -1449,7 +1457,7 @@ final class AppSwitcher: ObservableObject {
     private func stepIconRowFromEdgeHover() {
         guard sessionActive, usesIconRowLayout,
               let hovered = iconRowEdgeHoverIndex,
-              let delta = SwitcherSupport.iconRowEdgeHoverDelta(
+              let direction = SwitcherSupport.iconRowEdgeHoverDirection(
                 hoveredIndex: hovered,
                 firstVisibleIndex: iconRowFirstVisibleIndex,
                 visibleCount: iconRowLayout.visibleIconCount,
@@ -1457,6 +1465,16 @@ final class AppSwitcher: ObservableObject {
               )
         else {
             cancelIconRowEdgeHover()
+            return
+        }
+        guard let delta = SwitcherSupport.iconRowEdgeHoverDelta(
+            hoveredIndex: hovered,
+            firstVisibleIndex: iconRowFirstVisibleIndex,
+            visibleCount: iconRowLayout.visibleIconCount,
+            itemCount: iconRowItemCount
+        ) else {
+            cancelIconRowEdgeHover()
+            bounceIconRow(at: direction, index: hovered)
             return
         }
 
@@ -1491,6 +1509,15 @@ final class AppSwitcher: ObservableObject {
         iconRowEdgeHoverWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + SwitcherSupport.iconRowEdgeHoverRepeatInterval,
                                       execute: work)
+    }
+
+    private func bounceIconRow(at direction: Int, index: Int) {
+        iconRowLastBouncedIndex = index
+        iconRowTerminalBounceDirection = direction
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard self?.iconRowTerminalBounceDirection == direction else { return }
+            self?.iconRowTerminalBounceDirection = 0
+        }
     }
 
     private func cancelIconRowEdgeHover() {
