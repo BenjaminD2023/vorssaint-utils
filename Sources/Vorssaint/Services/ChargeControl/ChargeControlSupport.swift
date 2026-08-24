@@ -192,6 +192,16 @@ enum ChargeControlPolicy {
         isDischarging && heartbeatAge > heartbeatLimit
     }
 
+    /// Fit a write to the key's reported size. M-series firmware uses 1-byte
+    /// CH0C or 4-byte CHTE for the same inhibit bit.
+    static func paddedSMCBytes(_ bytes: [UInt8], to size: UInt32) -> [UInt8] {
+        let count = Int(size)
+        guard count > 0 else { return [] }
+        if bytes.count == count { return bytes }
+        if bytes.count > count { return Array(bytes.prefix(count)) }
+        return bytes + Array(repeating: 0, count: count - bytes.count)
+    }
+
     private static func calibrationGate(chargePercent: Int,
                                         state: ChargeCalibrationState) -> ChargeControlGate {
         switch state.phase {

@@ -9952,6 +9952,11 @@ struct MetricsTests {
         expect(ChargeControlPolicy.restoreReason(isDischarging: true, heartbeatAge: 8)
                 && !ChargeControlPolicy.restoreReason(isDischarging: true, heartbeatAge: 2),
                "force discharge restores if the app heartbeat is lost")
+        expect(ChargeControlPolicy.paddedSMCBytes([0x01, 0x00, 0x00, 0x00], to: 4)
+                == [0x01, 0x00, 0x00, 0x00]
+                && ChargeControlPolicy.paddedSMCBytes([0x01, 0x00, 0x00, 0x00], to: 1) == [0x01]
+                && ChargeControlPolicy.paddedSMCBytes([0x01], to: 4) == [0x01, 0x00, 0x00, 0x00],
+               "SMC writes pad or trim to the key's reported size")
 
         for language in AppLanguage.allCases {
             let strings = FeatureStrings.chargeControl(language)

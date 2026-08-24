@@ -569,8 +569,10 @@ final class ChargeControlService: ObservableObject {
             DispatchQueue.main.async {
                 guard self.accessState != .enabled else { return }
                 self.profile = profile
-                if profile == nil {
-                    self.error = PowerSampler.hasInternalBattery ? .unsupportedHardware : .noBattery
+                // Unprivileged code cannot see every charging SMC key. Only the
+                // helper may declare the Mac unsupported; until then offer Allow.
+                if profile == nil, !PowerSampler.hasInternalBattery {
+                    self.error = .noBattery
                 }
             }
         }

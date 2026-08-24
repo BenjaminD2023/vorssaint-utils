@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 - The Charge Limit slider can be dragged in Settings and in the menu bar panel.
+- Charge Limit no longer calls an M-series Mac unsupported from a userspace
+  SMC probe; the privileged helper decides, and CHTE/CH0C size differences
+  are accepted.
 
 ## [3.3.3-beta.2] - 2026-08-22
 
