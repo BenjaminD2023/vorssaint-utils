@@ -22,6 +22,155 @@ struct ChargeControlSection: View {
     }
 }
 
+/// Compact limit slider under the Battery metric's charge percentage.
+struct ChargeLimitInlineAdjuster: View {
+    @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var service = ChargeControlService.shared
+    @ObservedObject private var features = FeatureRuntime.shared
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var strings: ChargeControlFeatureStrings {
+        FeatureStrings.chargeControl(l10n.language)
+    }
+
+    var body: some View {
+        let _ = features.revision
+        if PowerSampler.hasInternalBattery {
+            VStack(alignment: .leading, spacing: 8) {
+                Divider().opacity(0.55)
+
+                HStack(spacing: 8) {
+                    Text(strings.limitLabel)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    Text("\(service.limitPercent)%")
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(ChargeLimitPalette.lime(for: colorScheme))
+                }
+
+                ChargeLimitSlider(
+                    value: Binding(
+                        get: { Double(service.limitPercent) },
+                        set: { applyLimit(Int($0.rounded())) }
+                    ),
+                    range: Double(ChargeControlPolicy.minimumLimit)...Double(ChargeControlPolicy.maximumLimit)
+                )
+                .disabled(service.isCalibrating)
+                .opacity(service.isCalibrating ? 0.45 : 1)
+                .help(strings.enableCaption)
+                .accessibilityLabel(strings.limitLabel)
+
+                footer
+            }
+            .onAppear { service.panelDidAppear() }
+            .onDisappear { service.panelDidDisappear() }
+        }
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        if service.accessState == .notRegistered {
+            Button(strings.allowControl) {
+                ensureFeatureAvailable()
+                service.authorize()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(ChargeLimitPalette.lime(for: colorScheme))
+            .controlSize(.small)
+            .frame(maxWidth: .infinity)
+            Text(strings.approvalCaption)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if service.accessState == .requiresApproval {
+            Button(strings.openSettings, action: service.authorize)
+                .buttonStyle(.borderedProminent)
+                .tint(ChargeLimitPalette.lime(for: colorScheme))
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+            Text(strings.approvalCaption)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if service.accessState == .enabled {
+            HStack(spacing: 8) {
+                Toggle(strings.enableToggle, isOn: Binding(
+                    get: { service.enabled },
+                    set: { newValue in
+                        ensureFeatureAvailable()
+                        service.setEnabled(newValue)
+                    }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .disabled(service.isCalibrating)
+                Spacer(minLength: 0)
+                Text(statusText)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(statusColor)
+                    .lineLimit(1)
+            }
+        } else if let message = errorMessage {
+            Text(message)
+                .font(.system(size: 10))
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var statusText: String {
+        if service.isCalibrating, let phase = service.calibrationPhase {
+            switch phase {
+            case .chargingToFull: return strings.calPhaseCharge
+            case .dischargingToFloor: return strings.calPhaseDischarge
+            case .chargingToFullAgain: return strings.calPhaseChargeAgain
+            case .holdingAtFull: return strings.calPhaseHold
+            case .restoringLimit: return strings.calPhaseRestore
+            }
+        }
+        if service.isDischargingToLimit { return strings.discharging }
+        if service.appliedGate == .inhibitCharging { return strings.holding }
+        if service.isCharging { return strings.charging }
+        if !service.externalConnected { return strings.onBattery }
+        return strings.notCharging
+    }
+
+    private var statusColor: Color {
+        if service.appliedGate == .forceDischarge || service.isDischargingToLimit {
+            return ChargeLimitPalette.discharge(for: colorScheme)
+        }
+        if service.appliedGate == .inhibitCharging {
+            return ChargeLimitPalette.lime(for: colorScheme)
+        }
+        if service.isCharging { return ChargeLimitPalette.charging(for: colorScheme) }
+        return .secondary
+    }
+
+    private var errorMessage: String? {
+        switch service.error {
+        case .unsupportedHardware: return strings.unsupported
+        case .helperUnavailable, .controlFailed: return strings.failed
+        default: return nil
+        }
+    }
+
+    private func applyLimit(_ percent: Int) {
+        ensureFeatureAvailable()
+        if !service.enabled { service.setEnabled(true) }
+        service.setLimit(percent)
+    }
+
+    private func ensureFeatureAvailable() {
+        if !AppFeature.chargeControl.isAvailable {
+            FeatureRuntime.shared.setAvailable(.chargeControl, true)
+            service.panelDidAppear()
+        }
+    }
+}
+
 struct ChargeControlCardContent: View {
     var compact = false
     @ObservedObject private var l10n = L10n.shared
