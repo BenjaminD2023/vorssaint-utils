@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Menu bar CPU, GPU, memory, disk usage, battery and accessory batteries can
+  each show numeric values or compact bars. Battery bars use native Mac
+  icons (fill by percent, lightning while charging, cable when plugged in
+  but not adding charge). Under Monitor.
+
+### Added
+- The menu bar battery reading shows a yellow dot while Low Power Mode is on.
+  Numeric battery values also show a green dot while charging.
+
 ## [3.3.3-beta.2] - 2026-08-22
 
 ### Added

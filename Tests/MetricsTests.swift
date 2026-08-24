@@ -2552,6 +2552,13 @@ struct MetricsTests {
                "menu bar metric spacing defaults to the compact look")
         expect(registeredDefaults[DefaultsKey.menuBarMetricAppearance] as? String == "values",
                "menu bar usage metrics keep numeric values by default")
+        expect(registeredDefaults[DefaultsKey.menuBarCPUAppearance] as? String == ""
+                && registeredDefaults[DefaultsKey.menuBarGPUAppearance] as? String == ""
+                && registeredDefaults[DefaultsKey.menuBarMemoryAppearance] as? String == ""
+                && registeredDefaults[DefaultsKey.menuBarDiskUsageAppearance] as? String == ""
+                && registeredDefaults[DefaultsKey.menuBarBatteryAppearance] as? String == ""
+                && registeredDefaults[DefaultsKey.menuBarPeripheralBatteryAppearance] as? String == "",
+               "per-item menu bar appearances inherit the global choice until set")
         expect(registeredDefaults[DefaultsKey.menuBarUsageBarNormalColor] as? String == "#64D2FF",
                "menu bar bars use a bright normal color by default")
         expect(registeredDefaults[DefaultsKey.menuBarUsageBarElevatedColor] as? String == "#FFD60A"
@@ -2572,6 +2579,84 @@ struct MetricsTests {
                "bar appearance is a valid stored choice")
         expect(Defaults.sanitizedMenuBarMetricAppearance("banana") == "values",
                "unknown menu bar appearances fall back to numeric values")
+        expect(Defaults.sanitizedMenuBarMetricItemAppearance("") == "",
+               "an empty per-item appearance stays empty so it can inherit")
+        expect(Defaults.sanitizedMenuBarMetricItemAppearance("bars") == "bars",
+               "a per-item bar appearance is a valid stored choice")
+        expect(Defaults.sanitizedMenuBarMetricItemAppearance("banana") == "values",
+               "unknown per-item appearances fall back to numeric values")
+        expect(MenuBarMetricAppearance.barCapableAppearanceKeys == [
+            DefaultsKey.menuBarCPUAppearance,
+            DefaultsKey.menuBarGPUAppearance,
+            DefaultsKey.menuBarMemoryAppearance,
+            DefaultsKey.menuBarDiskUsageAppearance,
+            DefaultsKey.menuBarBatteryAppearance,
+            DefaultsKey.menuBarPeripheralBatteryAppearance,
+        ], "usage bars cover every percentage based menu bar metric")
+        let appearanceSuite = "vorss.tests.menuBarAppearance"
+        if let appearanceDefaults = UserDefaults(suiteName: appearanceSuite) {
+            appearanceDefaults.removePersistentDomain(forName: appearanceSuite)
+            appearanceDefaults.set("bars", forKey: DefaultsKey.menuBarMetricAppearance)
+            expect(MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarCPUAppearance,
+                                                   in: appearanceDefaults) == .bars
+                    && MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarGPUAppearance,
+                                                       in: appearanceDefaults) == .bars
+                    && MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarMemoryAppearance,
+                                                       in: appearanceDefaults) == .bars
+                    && MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarDiskUsageAppearance,
+                                                       in: appearanceDefaults) == .bars
+                    && MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarBatteryAppearance,
+                                                       in: appearanceDefaults) == .bars
+                    && MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarPeripheralBatteryAppearance,
+                                                       in: appearanceDefaults) == .bars,
+                   "an unset per-item appearance follows the global bars choice")
+            appearanceDefaults.set("values", forKey: DefaultsKey.menuBarCPUAppearance)
+            expect(MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarCPUAppearance,
+                                                   in: appearanceDefaults) == .values
+                    && MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarGPUAppearance,
+                                                       in: appearanceDefaults) == .bars
+                    && MenuBarMetricAppearance.usesBars(appearanceKey: DefaultsKey.menuBarGPUAppearance,
+                                                        in: appearanceDefaults)
+                    && !MenuBarMetricAppearance.usesBars(appearanceKey: DefaultsKey.menuBarCPUAppearance,
+                                                         in: appearanceDefaults),
+                   "a per-item appearance overrides only that metric")
+            expect(MenuBarMetricAppearance.anyUsesBars(in: appearanceDefaults),
+                   "any usage bar is enough to keep bar colors available")
+            appearanceDefaults.set("values", forKey: DefaultsKey.menuBarMetricAppearance)
+            appearanceDefaults.set("", forKey: DefaultsKey.menuBarCPUAppearance)
+            appearanceDefaults.set("values", forKey: DefaultsKey.menuBarGPUAppearance)
+            appearanceDefaults.set("values", forKey: DefaultsKey.menuBarMemoryAppearance)
+            appearanceDefaults.set("values", forKey: DefaultsKey.menuBarDiskUsageAppearance)
+            appearanceDefaults.set("values", forKey: DefaultsKey.menuBarBatteryAppearance)
+            appearanceDefaults.set("values", forKey: DefaultsKey.menuBarPeripheralBatteryAppearance)
+            expect(!MenuBarMetricAppearance.anyUsesBars(in: appearanceDefaults),
+                   "all-values usage metrics hide the bar color controls")
+            appearanceDefaults.set("banana", forKey: DefaultsKey.menuBarCPUAppearance)
+            expect(MenuBarMetricAppearance.current(appearanceKey: DefaultsKey.menuBarCPUAppearance,
+                                                   in: appearanceDefaults) == .values,
+                   "a corrupt per-item appearance falls back to numeric values")
+            appearanceDefaults.removePersistentDomain(forName: appearanceSuite)
+        }
+        expect(MenuBarBatterySupport.symbolName(for: 75, isCharging: false) == "battery.75percent",
+               "on battery the native fill matches the charge")
+        expect(MenuBarBatterySupport.symbolName(for: 40, isCharging: true, isPluggedIn: true)
+                == "battery.100percent.bolt",
+               "charging uses the native lightning battery")
+        expect(MenuBarBatterySupport.symbolName(for: 80, isCharging: false, isPluggedIn: true)
+                == "powercord.fill",
+               "plugged in without charging uses the native cable")
+        expect(MenuBarBatteryDot.current(isCharging: true, lowPowerMode: true, nativeChargingIcon: false)
+                == .charging
+                && MenuBarBatteryDot.current(isCharging: true, lowPowerMode: true, nativeChargingIcon: true)
+                == .lowPower
+                && MenuBarBatteryDot.current(isCharging: false, lowPowerMode: true)
+                == .lowPower
+                && MenuBarBatteryDot.current(isCharging: false, lowPowerMode: false) == nil,
+               "numeric battery values get a charging dot; native bars keep Low Power Mode")
+        expectClose(MenuBarUsageBarSupport.percentFraction(80), 0.8,
+                    "menu bar battery bars map a percent onto the 0...1 fill")
+        expectClose(MenuBarUsageBarSupport.percentFraction(150), 1,
+                    "menu bar percent bars clamp readings above full")
         expect(MenuBarMetricAppearance.values.allowsCombinedTemperatures,
                "numeric menu bar values may combine usage and temperature")
         expect(!MenuBarMetricAppearance.bars.allowsCombinedTemperatures,
@@ -13832,6 +13917,12 @@ struct MetricsTests {
         let backupKeys = SettingsBackupSupport.exportKeys()
         expect(backupKeys.contains(DefaultsKey.switcherEnabled)
                 && backupKeys.contains(DefaultsKey.menuBarCPU)
+                && backupKeys.contains(DefaultsKey.menuBarCPUAppearance)
+                && backupKeys.contains(DefaultsKey.menuBarGPUAppearance)
+                && backupKeys.contains(DefaultsKey.menuBarMemoryAppearance)
+                && backupKeys.contains(DefaultsKey.menuBarDiskUsageAppearance)
+                && backupKeys.contains(DefaultsKey.menuBarBatteryAppearance)
+                && backupKeys.contains(DefaultsKey.menuBarPeripheralBatteryAppearance)
                 && backupKeys.contains(DefaultsKey.language)
                 && backupKeys.contains(DefaultsKey.appVolumes)
                 && backupKeys.contains(DefaultsKey.mixerShowFinder)

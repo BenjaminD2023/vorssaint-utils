@@ -54,6 +54,9 @@ enum SettingsDirectory {
                 SettingsDirectoryItem(page: .monitor, title: s.tabMonitor, icon: "chart.line.uptrend.xyaxis",
                                       keywords: [s.menuBarSpacingLabel, s.menuBarHideIconToggle,
                                                  s.monitorMemoryPressureDot,
+                                                 FeatureStrings.menuBarAppearance(language).label,
+                                                 FeatureStrings.menuBarAppearance(language).values,
+                                                 FeatureStrings.menuBarAppearance(language).bars,
                                                  FeatureStrings.fanControl(language).menuBarTitle]),
             ]),
             (categories.windowsControls, [
