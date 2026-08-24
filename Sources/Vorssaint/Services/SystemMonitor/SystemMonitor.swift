@@ -184,6 +184,7 @@ final class SystemMonitor: ObservableObject {
     private var powerHistory: MetricHistory
     private var batteryHistory: MetricHistory
     private var powerSourceRunLoopSource: CFRunLoopSource?
+    private var powerStateObserver: NSObjectProtocol?
 
     private init() {
         cpuHistory = MetricHistory(capacity: historyCapacity)
@@ -198,12 +199,16 @@ final class SystemMonitor: ObservableObject {
         batteryHistory = MetricHistory(capacity: historyCapacity)
         if PowerSampler.hasInternalBattery {
             installPowerSourceObserver()
+            installLowPowerModeObserver()
         }
     }
 
     deinit {
         if let powerSourceRunLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .defaultMode)
+        }
+        if let powerStateObserver {
+            NotificationCenter.default.removeObserver(powerStateObserver)
         }
     }
 
@@ -225,6 +230,21 @@ final class SystemMonitor: ObservableObject {
         }, context)?.takeRetainedValue()
         if let powerSourceRunLoopSource {
             CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .defaultMode)
+        }
+    }
+
+    /// Low Power Mode is not a power-source change, so IOPS notifications
+    /// miss it. Publish as soon as the process-info flag flips so the menu
+    /// bar battery dot appears without waiting for the next sample stride.
+    private func installLowPowerModeObserver() {
+        powerStateObserver = NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.shouldRun,
+                  self.currentPlan(defaults: .standard).needPower else { return }
+            self.refresh()
         }
     }
 
@@ -690,6 +710,13 @@ final class SystemMonitor: ObservableObject {
                     if let charge = power.chargePercent { self.batteryHistory.push(Double(charge) / 100.0) }
                 } else {
                     next.power = self.lastPowerReading
+                }
+                let lowPower = PowerSampler.isLowPowerModeEnabled
+                if var power = next.power, power.isLowPowerMode != lowPower {
+                    power.isLowPowerMode = lowPower
+                    next.power = power
+                    self.lastPowerReading = power
+                    sampledAnything = true
                 }
             }
 

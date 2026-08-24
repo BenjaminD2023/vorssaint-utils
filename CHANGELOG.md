@@ -13,6 +13,14 @@ All notable changes to this project are documented here. The format follows
   page, and under Energy. While plugged in, Discharge and Top up sit under
   Battery in the menu bar panel; Discharge drains to the limit and Top up
   temporarily charges to 100%.
+- The menu bar battery reading shows a yellow dot while Low Power Mode is on.
+  Numeric battery values also show a green dot while charging.
+
+### Changed
+- Menu bar CPU, GPU, memory, disk usage, battery and accessory batteries can
+  each show numeric values or compact bars. Battery bars use native Mac
+  icons (fill by percent, lightning while charging, cable when plugged in
+  but not adding charge). Under Monitor.
 
 ### Fixed
 - The Charge Limit slider can be dragged in Settings and in the menu bar panel.

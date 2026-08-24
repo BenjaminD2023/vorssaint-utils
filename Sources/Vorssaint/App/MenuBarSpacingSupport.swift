@@ -16,19 +16,67 @@ enum MenuBarMetricSpacing: String, CaseIterable {
     }
 }
 
-/// How percentage based monitor readings appear in the menu bar. Values keep
-/// the existing numeric blocks; bars replace CPU, GPU, memory and disk usage
-/// with a compact vertical gauge. Readings without a fixed 0...100 scale stay
-/// numeric in either mode.
+/// How a percentage-based monitor reading appears in the menu bar. Values keep
+/// the numeric block; bars replace it with a compact vertical gauge. CPU, GPU,
+/// memory, disk usage, battery and accessory batteries each pick independently,
+/// falling back to the global setting until the user sets one. Readings without
+/// a fixed 0...100 scale stay numeric.
 enum MenuBarMetricAppearance: String, CaseIterable {
     case values, bars
 
     var allowsCombinedTemperatures: Bool { self == .values }
 
-    static var current: MenuBarMetricAppearance {
-        let raw = UserDefaults.standard.string(forKey: DefaultsKey.menuBarMetricAppearance) ?? ""
-        let appearance = Defaults.sanitizedMenuBarMetricAppearance(raw)
-        return MenuBarMetricAppearance(rawValue: appearance) ?? .values
+    static let barCapableAppearanceKeys = [
+        DefaultsKey.menuBarCPUAppearance,
+        DefaultsKey.menuBarGPUAppearance,
+        DefaultsKey.menuBarMemoryAppearance,
+        DefaultsKey.menuBarDiskUsageAppearance,
+        DefaultsKey.menuBarBatteryAppearance,
+        DefaultsKey.menuBarPeripheralBatteryAppearance,
+    ]
+
+    static var current: MenuBarMetricAppearance { current(in: .standard) }
+
+    static func current(in defaults: UserDefaults = .standard) -> MenuBarMetricAppearance {
+        let raw = defaults.string(forKey: DefaultsKey.menuBarMetricAppearance) ?? ""
+        return MenuBarMetricAppearance(rawValue: Defaults.sanitizedMenuBarMetricAppearance(raw)) ?? .values
+    }
+
+    /// Resolves one metric's display. An empty per-item value inherits the
+    /// global setting so existing "all bars" or "all values" choices survive.
+    static func current(appearanceKey: String?,
+                        in defaults: UserDefaults = .standard) -> MenuBarMetricAppearance {
+        guard let appearanceKey else { return .values }
+        let raw = defaults.string(forKey: appearanceKey) ?? ""
+        if raw.isEmpty { return current(in: defaults) }
+        return MenuBarMetricAppearance(rawValue: Defaults.sanitizedMenuBarMetricAppearance(raw)) ?? .values
+    }
+
+    static func usesBars(appearanceKey: String?,
+                         in defaults: UserDefaults = .standard) -> Bool {
+        current(appearanceKey: appearanceKey, in: defaults) == .bars
+    }
+
+    static func anyUsesBars(in defaults: UserDefaults = .standard) -> Bool {
+        barCapableAppearanceKeys.contains { usesBars(appearanceKey: $0, in: defaults) }
+    }
+}
+
+/// Native menu-bar battery glyphs: fill by percent, a bolt while charging,
+/// and the power cable when plugged in but not adding charge.
+enum MenuBarBatterySupport {
+    static func symbolName(for percent: Int,
+                           isCharging: Bool,
+                           isPluggedIn: Bool = false) -> String {
+        if isCharging { return "battery.100percent.bolt" }
+        if isPluggedIn { return "powercord.fill" }
+        switch max(0, min(100, percent)) {
+        case 90...: return "battery.100percent"
+        case 65..<90: return "battery.75percent"
+        case 40..<65: return "battery.50percent"
+        case 15..<40: return "battery.25percent"
+        default: return "battery.0percent"
+        }
     }
 }
 
@@ -52,6 +100,10 @@ enum MenuBarUsageBarSupport {
     static func memoryFraction(used: UInt64?, total: UInt64?) -> Double? {
         guard let used, let total, total > 0 else { return nil }
         return clampedFraction(Double(used) / Double(total))
+    }
+
+    static func percentFraction(_ percent: Int) -> Double {
+        clampedFraction(Double(percent) / 100)
     }
 
     static func clampedFraction(_ fraction: Double) -> Double {
