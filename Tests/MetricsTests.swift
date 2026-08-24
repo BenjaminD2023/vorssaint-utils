@@ -4013,8 +4013,18 @@ struct MetricsTests {
                                        frame: topSnapFrame,
                                        visibleFrame: snapVisibleFrame),
                "touching the lower edge of the menu bar previews the upper half")
-        expect(snapTarget(CGPoint(x: 720, y: 900))?.action == .topHalf,
-               "the full menu bar band remains a top snap target")
+        let maximizeSnapFrame = WindowLayoutGeometry.rect(for: .maximize,
+                                                          current: snapVisibleFrame,
+                                                          visibleFrame: snapVisibleFrame)
+        expect(snapTarget(CGPoint(x: 720, y: 900))
+               == WindowEdgeSnapTarget(action: .maximize,
+                                       frame: maximizeSnapFrame,
+                                       visibleFrame: snapVisibleFrame),
+               "dragging further to the physical top previews the full screen")
+        expect(snapTarget(CGPoint(x: 720, y: snapVisibleFrame.maxY + 6))?.action == .topHalf,
+               "the lower menu bar still tiles the upper half")
+        expect(snapTarget(CGPoint(x: 720, y: 894))?.action == .maximize,
+               "the upper menu bar promotes the top edge to fill the screen")
         expect(snapTarget(CGPoint(x: 720, y: snapVisibleFrame.maxY - 13)) == nil,
                "the top target does not reach below its activation band")
         expect(snapTarget(CGPoint(x: 0, y: 450))?.action == .leftHalf
@@ -4026,6 +4036,9 @@ struct MetricsTests {
                && snapTarget(CGPoint(x: 0, y: 0))?.action == .bottomLeft
                && snapTarget(CGPoint(x: 1440, y: 0))?.action == .bottomRight,
                "inclusive screen corners take priority over straight edges")
+        expect(snapTarget(CGPoint(x: 0, y: 900))?.action == .topLeft
+               && snapTarget(CGPoint(x: 1440, y: 900))?.action == .topRight,
+               "inclusive screen corners keep priority at the physical top")
         expect(snapTarget(CGPoint(x: 720, y: 450)) == nil,
                "dragging inside a display never creates a snap target")
 
@@ -4054,6 +4067,19 @@ struct MetricsTests {
         expect(snapTarget(CGPoint(x: 720, y: snapVisibleFrame.maxY),
                           screens: [snapScreen, upperSnapScreen]) == nil,
                "a menu bar boundary below another display remains an open seam")
+        let flushTopScreen = WindowEdgeSnapScreen(
+            frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+            visibleFrame: CGRect(x: 0, y: 40, width: 1440, height: 860)
+        )
+        expect(snapTarget(CGPoint(x: 720, y: 888), screens: [flushTopScreen])?.action == .topHalf,
+               "a display without a menu bar still tiles the upper half just below the top")
+        expect(snapTarget(CGPoint(x: 720, y: 900), screens: [flushTopScreen])?.action == .maximize,
+               "a display without a menu bar fills the screen at the physical top")
+        expect(WindowEdgeSnapSupport.topCenterAction(pointY: 875, visibleTop: 875, physicalTop: 900)
+               == .topHalf
+               && WindowEdgeSnapSupport.topCenterAction(pointY: 900, visibleTop: 875, physicalTop: 900)
+               == .maximize,
+               "the top-center split is the upper half, then the full screen")
         expect(WindowEdgeSnapSupport.systemTilingEnabled { _ in nil },
                "unwritten system tiling choices keep their enabled default")
         expect(!WindowEdgeSnapSupport.systemTilingEnabled { _ in false },

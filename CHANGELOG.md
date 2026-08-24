@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format follows
   each show numeric values or compact bars. Battery bars use native Mac
   icons (fill by percent, lightning while charging, cable when plugged in
   but not adding charge). Under Monitor.
+- Window edge snapping fills the screen when a window is dragged further up
+  past the upper-half zone, and the live preview follows.
+- App Switcher overflow-row edge hover bounces back at the end of the row.
 
 ### Fixed
 - The Charge Limit slider can be dragged in Settings and in the menu bar panel.
@@ -29,6 +32,7 @@ All notable changes to this project are documented here. The format follows
   are accepted.
 - Charge Limit now starts the charging helper when you set a limit, so the Mac
   actually stops charging at that level instead of only remembering the number.
+- App Switcher takes over the system Command-Tab switcher while it is enabled.
 
 ## [3.3.3-beta.2] - 2026-08-22
 

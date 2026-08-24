@@ -460,7 +460,9 @@ enum WindowEdgeSnapSupport {
     /// Resolves the hot zone under an AppKit-coordinate pointer. Screen frames
     /// choose the reachable edge; visible frames keep the result clear of the
     /// menu bar and Dock. A seam shared by two displays is not an edge, so a
-    /// window can cross it without being caught halfway through.
+    /// window can cross it without being caught halfway through. The top edge
+    /// tiles the upper half on first contact; continuing through the menu bar
+    /// fills the screen, and the live preview uses the same split.
     static func target(at point: CGPoint,
                        screens: [WindowEdgeSnapScreen],
                        distance: CGFloat = activationDistance) -> WindowEdgeSnapTarget? {
@@ -506,7 +508,9 @@ enum WindowEdgeSnapSupport {
                 } else if point.x >= frame.maxX - horizontalCorner {
                     action = .topRight
                 } else {
-                    action = .topHalf
+                    action = topCenterAction(pointY: point.y,
+                                             visibleTop: visibleTop,
+                                             physicalTop: frame.maxY)
                 }
             } else if nearBottom {
                 if point.x <= frame.minX + horizontalCorner {
@@ -542,6 +546,19 @@ enum WindowEdgeSnapSupport {
                                         visibleFrame: screen.visibleFrame)
         }
         return nil
+    }
+
+    /// First contact with the top edge is the upper half. Continuing through
+    /// the menu bar (or onto the physical top when there is no menu bar)
+    /// fills the visible screen. Corners stay corners at every height.
+    static func topCenterAction(pointY: CGFloat,
+                                visibleTop: CGFloat,
+                                physicalTop: CGFloat) -> WindowLayoutAction {
+        let menuBar = max(physicalTop - visibleTop, 0)
+        let promoteFrom = menuBar >= activationDistance
+            ? physicalTop - menuBar / 2
+            : physicalTop
+        return pointY >= promoteFrom ? .maximize : .topHalf
     }
 
     private enum Edge {
