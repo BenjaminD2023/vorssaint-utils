@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Charge Limit can stop charging at a chosen level (20–100%), discharge down to
+  that level, and run a full battery calibration cycle. Off by default in
+  Features, with a dial in the menu bar panel, a slider on the Battery metric
+  page, and under Energy. While plugged in, Discharge drains to the limit and
+  Top up temporarily charges to 100%.
+
+### Fixed
+- The Charge Limit slider can be dragged in Settings and in the menu bar panel.
+- Charge Limit no longer calls an M-series Mac unsupported from a userspace
+  SMC probe; the privileged helper decides, and CHTE/CH0C size differences
+  are accepted.
+
 ## [3.3.3-beta.2] - 2026-08-22
 
 ### Added
