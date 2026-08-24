@@ -734,6 +734,25 @@ enum SwitcherSupport {
                                       firstVisibleIndex: Int,
                                       visibleCount: Int,
                                       itemCount: Int) -> Int? {
+        guard let direction = iconRowEdgeHoverDirection(hoveredIndex: hoveredIndex,
+                                                        firstVisibleIndex: firstVisibleIndex,
+                                                        visibleCount: visibleCount,
+                                                        itemCount: itemCount)
+        else { return nil }
+        let visible = max(1, visibleCount)
+        let first = clampedIconRowFirstVisibleIndex(itemCount: itemCount,
+                                                    visibleCount: visible,
+                                                    firstVisibleIndex: firstVisibleIndex)
+        return direction < 0 ? (first > 0 ? -1 : nil)
+                             : (first + visible < itemCount ? 1 : nil)
+    }
+
+    /// Direction of the visible edge under the pointer, including terminal
+    /// edges where no further step is possible.
+    static func iconRowEdgeHoverDirection(hoveredIndex: Int,
+                                          firstVisibleIndex: Int,
+                                          visibleCount: Int,
+                                          itemCount: Int) -> Int? {
         let visible = max(1, visibleCount)
         guard itemCount > visible else { return nil }
         let first = clampedIconRowFirstVisibleIndex(itemCount: itemCount,
@@ -743,6 +762,8 @@ enum SwitcherSupport {
         let hovered = min(max(0, hoveredIndex), itemCount - 1)
         if hovered == lastVisible, lastVisible < itemCount - 1 { return 1 }
         if hovered == first, first > 0 { return -1 }
+        if hovered == first { return -1 }
+        if hovered == lastVisible { return 1 }
         return nil
     }
 

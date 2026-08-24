@@ -8036,6 +8036,27 @@ struct MetricsTests {
                                                         visibleCount: 6,
                                                         itemCount: 5) == nil,
                "App Switcher overflow hover only steps from the last visible icon on a side")
+        expect(SwitcherSupport.iconRowEdgeHoverDirection(hoveredIndex: 0,
+                                                         firstVisibleIndex: 0,
+                                                         visibleCount: 6,
+                                                         itemCount: 12) == -1
+               && SwitcherSupport.iconRowEdgeHoverDirection(hoveredIndex: 11,
+                                                            firstVisibleIndex: 6,
+                                                            visibleCount: 6,
+                                                            itemCount: 12) == 1
+               && SwitcherSupport.iconRowEdgeHoverDirection(hoveredIndex: 5,
+                                                            firstVisibleIndex: 0,
+                                                            visibleCount: 6,
+                                                            itemCount: 12) == 1
+               && SwitcherSupport.iconRowEdgeHoverDirection(hoveredIndex: 2,
+                                                            firstVisibleIndex: 0,
+                                                            visibleCount: 6,
+                                                            itemCount: 12) == nil
+               && SwitcherSupport.iconRowEdgeHoverDirection(hoveredIndex: 3,
+                                                            firstVisibleIndex: 0,
+                                                            visibleCount: 6,
+                                                            itemCount: 5) == nil,
+               "App Switcher overflow hover identifies visible and terminal edges")
         expect(SwitcherSupport.iconRowIndexAfterEdgeHoverStep(firstVisibleIndex: 1,
                                                               visibleCount: 6,
                                                               itemCount: 12,
