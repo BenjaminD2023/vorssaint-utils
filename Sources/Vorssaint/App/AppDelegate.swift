@@ -230,6 +230,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         TextSnippetService.shared.suspend()
         // Takes the Caps Lock mapping back out before the process goes away.
         SuperKeyService.shared.suspend()
+        // Dock's ⌘Tab hotkeys persist after quit; put them back with the tap.
+        AppSwitcher.shared.suspend()
         MiddleClickService.shared.suspend()
         SmoothScrollService.shared.suspend()
         MouseNavigationService.shared.suspend()
