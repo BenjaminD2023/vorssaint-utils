@@ -50,7 +50,9 @@ enum SettingsDirectory {
                                                  FeatureStrings.keepAwakeDisplaySleep(language)
                                                      .allowDisplaySleep,
                                                  FeatureStrings.bluetoothSleep(language).pageTitle,
-                                                 FeatureStrings.bluetoothSleep(language).enable]),
+                                                 FeatureStrings.bluetoothSleep(language).enable,
+                                                 FeatureStrings.chargeControl(language).title,
+                                                 FeatureStrings.chargeControl(language).calibrationTitle]),
                 SettingsDirectoryItem(page: .monitor, title: s.tabMonitor, icon: "chart.line.uptrend.xyaxis",
                                       keywords: [s.menuBarSpacingLabel, s.menuBarHideIconToggle,
                                                  s.monitorMemoryPressureDot,
