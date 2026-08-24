@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+import AppKit
 import SwiftUI
 
 struct ChargeControlSection: View {
@@ -258,12 +259,17 @@ struct ChargeControlCardContent: View {
                     .foregroundStyle(ChargeLimitPalette.lime(for: colorScheme))
             }
             ChargeLimitSlider(
-                value: Binding(get: { Double(service.limitPercent) },
-                               set: { service.setLimit(Int($0.rounded())) }),
+                value: Binding(
+                    get: { Double(service.limitPercent) },
+                    set: { newValue in
+                        if !service.enabled { service.setEnabled(true) }
+                        service.setLimit(Int(newValue.rounded()))
+                    }
+                ),
                 range: Double(ChargeControlPolicy.minimumLimit)...Double(ChargeControlPolicy.maximumLimit)
             )
-            .disabled(!service.enabled || service.isCalibrating || service.accessState != .enabled)
-            .opacity(service.enabled ? 1 : 0.45)
+            .disabled(service.isCalibrating)
+            .opacity(service.isCalibrating ? 0.45 : 1)
         }
     }
 
@@ -517,8 +523,9 @@ struct ChargeLimitSlider: View {
 
     var body: some View {
         GeometryReader { geo in
-            let width = geo.size.width
-            let fraction = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+            let width = max(geo.size.width, 1)
+            let span = range.upperBound - range.lowerBound
+            let fraction = span > 0 ? (value - range.lowerBound) / span : 0
             let x = max(7, min(width - 7, width * fraction))
             ZStack(alignment: .leading) {
                 Capsule().fill(ChargeLimitPalette.track(for: colorScheme)).frame(height: 8)
@@ -530,23 +537,83 @@ struct ChargeLimitSlider: View {
                     .overlay(Circle().strokeBorder(ChargeLimitPalette.lime(for: colorScheme).opacity(0.85), lineWidth: 2))
                     .offset(x: x - 9)
             }
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                guard isEnabled else { return }
-                let raw = min(max(drag.location.x / max(width, 1), 0), 1)
-                let stepped = (range.lowerBound + raw * (range.upperBound - range.lowerBound)).rounded()
-                value = min(max(stepped, range.lowerBound), range.upperBound)
-            })
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .allowsHitTesting(false)
         }
         .frame(height: 22)
+        .overlay {
+            ChargeLimitSliderCatcher(value: $value, range: range, isEnabled: isEnabled)
+        }
+        .accessibilityElement(children: .ignore)
         .accessibilityValue("\(Int(value.rounded()))%")
         .accessibilityAdjustableAction { direction in
+            guard isEnabled else { return }
             switch direction {
             case .increment: value = min(range.upperBound, value + 1)
             case .decrement: value = max(range.lowerBound, value - 1)
             default: break
             }
+        }
+    }
+}
+
+/// AppKit mouse tracking so the knob still moves inside Settings' Form and
+/// the panel's NSScrollView, which swallow SwiftUI DragGesture.
+private struct ChargeLimitSliderCatcher: NSViewRepresentable {
+    @Binding var value: Double
+    var range: ClosedRange<Double>
+    var isEnabled: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> CatcherView {
+        let view = CatcherView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = .clear
+        context.coordinator.bind(view, value: $value)
+        return view
+    }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        context.coordinator.bind(view, value: $value)
+        view.range = range
+        view.isEnabled = isEnabled
+        view.lastSent = value
+    }
+
+    final class Coordinator {
+        func bind(_ view: CatcherView, value: Binding<Double>) {
+            view.onChange = { value.wrappedValue = $0 }
+        }
+    }
+
+    final class CatcherView: NSView {
+        var range: ClosedRange<Double> = 20...100
+        var isEnabled = true
+        var lastSent: Double = 0
+        var onChange: (Double) -> Void = { _ in }
+
+        override var isOpaque: Bool { false }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            bounds.contains(point) ? self : nil
+        }
+        override func resetCursorRects() {
+            guard isEnabled else { return }
+            addCursorRect(bounds, cursor: .pointingHand)
+        }
+        override func mouseDown(with event: NSEvent) { send(event) }
+        override func mouseDragged(with event: NSEvent) { send(event) }
+
+        private func send(_ event: NSEvent) {
+            guard isEnabled, bounds.width > 1 else { return }
+            let x = convert(event.locationInWindow, from: nil).x
+            let fraction = min(max(x / bounds.width, 0), 1)
+            let next = (range.lowerBound + fraction * (range.upperBound - range.lowerBound)).rounded()
+            let clamped = min(max(next, range.lowerBound), range.upperBound)
+            guard clamped != lastSent else { return }
+            lastSent = clamped
+            onChange(clamped)
         }
     }
 }

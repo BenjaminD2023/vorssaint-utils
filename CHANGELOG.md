@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows
   Features, with a dial in the menu bar panel, a slider on the Battery metric
   page, and under Energy.
 
+### Fixed
+- The Charge Limit slider can be dragged in Settings and in the menu bar panel.
+
 ## [3.3.3-beta.2] - 2026-08-22
 
 ### Added
