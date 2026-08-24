@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+import AppKit
 import Foundation
 
 /// How tightly the menu bar metric blocks pack together. The standard reserve
@@ -77,6 +78,27 @@ enum MenuBarBatterySupport {
         case 15..<40: return "battery.25percent"
         default: return "battery.0percent"
         }
+    }
+}
+
+/// Green while charging (numeric battery values only — native bars already
+/// show a lightning bolt) and yellow while Low Power Mode is on.
+enum MenuBarBatteryDot: Equatable {
+    case charging, lowPower
+
+    var color: NSColor {
+        switch self {
+        case .charging: return .systemGreen
+        case .lowPower: return .systemYellow
+        }
+    }
+
+    static func current(isCharging: Bool,
+                        lowPowerMode: Bool,
+                        nativeChargingIcon: Bool = false) -> MenuBarBatteryDot? {
+        if isCharging && !nativeChargingIcon { return .charging }
+        if lowPowerMode { return .lowPower }
+        return nil
     }
 }
 
