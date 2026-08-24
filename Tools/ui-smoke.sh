@@ -12,7 +12,7 @@
 # Usage: ./Tools/ui-smoke.sh [output-dir]
 set -uo pipefail
 
-APP="/Applications/Vorssaint (Developer).app"
+APP="/Applications/vorssaint-local.app"
 PROCESS="VorssaintDeveloper"
 OUT="${1:-$(mktemp -d /tmp/vorss-ui-smoke.XXXXXX)}"
 mkdir -p "$OUT"

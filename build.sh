@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# Flags: --dev builds the local-only "Vorssaint (Developer)" variant (its own
+# Flags: --dev builds the local-only "vorssaint-local" variant (its own
 # bundle id, so it coexists with the official app); --install puts it in /Applications.
 DEV=0
 INSTALL=0
@@ -24,7 +24,7 @@ for arg in "$@"; do
 done
 
 if (( DEV )); then
-    APP_NAME="Vorssaint (Developer)"
+    APP_NAME="vorssaint-local"
     EXECUTABLE="VorssaintDeveloper"
     APP_BUNDLE_ID="com.vorssaint.utils.dev"
     BUILD_VARIANT_FLAGS=(-D VORSSAINT_DEVELOPMENT)
@@ -47,6 +47,13 @@ LEGACY_IDENTITY="Vorssaint Utils Signing"
 developer_id_identity() {
     security find-identity -v -p codesigning 2>/dev/null \
         | grep 'Developer ID Application' \
+        | head -1 \
+        | sed -E 's/.*"(.*)".*/\1/' || true
+}
+
+apple_development_identity() {
+    security find-identity -v -p codesigning 2>/dev/null \
+        | grep 'Apple Development:' \
         | head -1 \
         | sed -E 's/.*"(.*)".*/\1/' || true
 }
@@ -95,6 +102,7 @@ finalize_installed_bundle_after_child() {
     local charge_helper="$bundle/Contents/Library/LaunchServices/$CHARGE_HELPER_ID"
     local devid
     devid="$(developer_id_identity)"
+    appledev="$(apple_development_identity)"
 
     echo "▸ Finalizing installed signature…"
     sleep 3
@@ -111,6 +119,13 @@ finalize_installed_bundle_after_child() {
         [[ -f "$charge_helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
             --identifier "$CHARGE_HELPER_ID" --sign "$LEGACY_IDENTITY" "$charge_helper"
         /usr/bin/codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$bundle"
+    elif [[ -n "$appledev" ]]; then
+        [[ -f "$helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
+            --identifier "$FAN_HELPER_ID" --sign "$appledev" "$helper"
+        [[ -f "$charge_helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
+            --identifier "$CHARGE_HELPER_ID" --sign "$appledev" "$charge_helper"
+        /usr/bin/codesign --force --strip-disallowed-xattrs --entitlements "$ENTITLEMENTS" \
+            --sign "$appledev" "$bundle"
     else
         [[ -f "$helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
             --identifier "$FAN_HELPER_ID" --sign - "$helper"
@@ -417,8 +432,8 @@ if (( DEV )); then
     # A distinct identity so the Developer build installs and runs next to the
     # official app, with its own permissions, preferences and login item.
     /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.vorssaint.utils.dev" "$STAGE/Contents/Info.plist"
-    /usr/libexec/PlistBuddy -c "Set :CFBundleName Vorssaint (Developer)" "$STAGE/Contents/Info.plist"
-    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Vorssaint (Developer)" "$STAGE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName vorssaint-local" "$STAGE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName vorssaint-local" "$STAGE/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $EXECUTABLE" "$STAGE/Contents/Info.plist"
     FAN_PLIST="$STAGE/Contents/Library/LaunchDaemons/$FAN_HELPER_ID.plist"
     /usr/libexec/PlistBuddy -c "Set :Label $FAN_HELPER_ID" "$FAN_PLIST"
@@ -480,8 +495,12 @@ xattr -c -r "$STAGE" 2>/dev/null || true
 #   2. "Vorssaint Utils Signing" — the legacy stable self-signed identity, kept
 #      as a fallback so contributors without a Developer ID still get a constant
 #      designated requirement across their local builds.
-#   3. Ad-hoc — fresh clone with no identity at all.
+#   3. Apple Development — SMAppService helpers (charge limit, fan) cannot
+#      register from an ad-hoc signature; this identity is enough on the Mac
+#      that issued it.
+#   4. Ad-hoc — fresh clone with no identity at all.
 DEVID="$(developer_id_identity)"
+APPLE_DEV="$(apple_development_identity)"
 codesign_app() {
     local target="$1"
     if [[ -n "$DEVID" ]]; then
@@ -489,6 +508,9 @@ codesign_app() {
             --entitlements "$ENTITLEMENTS" --sign "$DEVID" "$target"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$target"
+    elif [[ -n "$APPLE_DEV" ]]; then
+        codesign --force --strip-disallowed-xattrs --entitlements "$ENTITLEMENTS" \
+            --sign "$APPLE_DEV" "$target"
     else
         codesign --force --strip-disallowed-xattrs --sign - "$target"
     fi
@@ -503,6 +525,9 @@ codesign_named_helper() {
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         codesign --force --strip-disallowed-xattrs --identifier "$identifier" \
             --sign "$LEGACY_IDENTITY" "$target"
+    elif [[ -n "$APPLE_DEV" ]]; then
+        codesign --force --strip-disallowed-xattrs --identifier "$identifier" \
+            --sign "$APPLE_DEV" "$target"
     else
         codesign --force --strip-disallowed-xattrs --identifier "$identifier" --sign - "$target"
     fi
@@ -518,6 +543,8 @@ sign_bundle() {
         echo "  signing with Developer ID (hardened runtime): $DEVID"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         echo "  signing with legacy self-signed identity: $LEGACY_IDENTITY"
+    elif [[ -n "$APPLE_DEV" ]]; then
+        echo "  signing with Apple Development: $APPLE_DEV"
     else
         echo "  signing ad-hoc (no identity installed — run Tools/setup-signing.sh)"
     fi
@@ -611,7 +638,7 @@ if (( INSTALL )); then
     stop_process "$EXECUTABLE"
     # Remove the pre-rename apps so two menu bar items never coexist. Same bundle
     # id, so macOS keeps the granted permissions for the new bundle.
-    for legacy in "Vorss:Vorss" "Vorssaint Utils:VorssaintUtils"; do
+    for legacy in "Vorss:Vorss" "Vorssaint Utils:VorssaintUtils" "Vorssaint (Developer):VorssaintDeveloper"; do
         name="${legacy%%:*}"; proc="${legacy##*:}"
         if [[ -d "/Applications/$name.app" ]]; then
             stop_process "$proc"
