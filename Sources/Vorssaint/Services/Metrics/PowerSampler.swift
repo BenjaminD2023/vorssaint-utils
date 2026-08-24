@@ -19,6 +19,7 @@ struct PowerReading {
     var isCharging = false
     var externalConnected = false
     var hasBattery = false
+    var isLowPowerMode = false
 
     var isEmpty: Bool {
         systemWatts == nil && adapterWatts == nil && adapterMaxWatts == nil
@@ -62,8 +63,13 @@ final class PowerSampler {
         }
     }
 
+    static var isLowPowerModeEnabled: Bool {
+        ProcessInfo.processInfo.isLowPowerModeEnabled
+    }
+
     func sample() -> PowerReading {
         var reading = PowerReading()
+        reading.isLowPowerMode = Self.isLowPowerModeEnabled
 
         if let smc {
             if !resolvedKeys {

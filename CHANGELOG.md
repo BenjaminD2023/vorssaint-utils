@@ -12,12 +12,21 @@ All notable changes to this project are documented here. The format follows
   Features, with a dial in the menu bar panel, a slider on the Battery metric
   page, and under Energy. While plugged in, Discharge drains to the limit and
   Top up temporarily charges to 100%.
+- The menu bar battery reading shows a yellow dot while Low Power Mode is on.
+  Numeric battery values also show a green dot while charging.
+
+### Changed
+- Menu bar CPU, GPU, memory, disk usage, battery and accessory batteries can
+  each show numeric values or compact bars. Battery bars use native Mac
+  icons (fill by percent, lightning while charging, cable when plugged in
+  but not adding charge). Under Monitor.
 
 ### Fixed
 - The Charge Limit slider can be dragged in Settings and in the menu bar panel.
 - Charge Limit no longer calls an M-series Mac unsupported from a userspace
   SMC probe; the privileged helper decides, and CHTE/CH0C size differences
   are accepted.
+
 ## [3.3.3-beta.3] - 2026-08-26
 
 ### Added

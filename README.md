@@ -81,7 +81,7 @@ The rest bends the same way: panel sections reorder and hide, the compact layout
 ### Know what your Mac is doing
 
 - **System monitor.** CPU, GPU, memory, swap use and temperatures with history graphs, including a choice between total memory in use and memory held by apps, plus battery health, time remaining, cycle count, power draw, an optional Fan Control beta with continuous manual speeds, custom temperature curves and live RPM, the apps burning energy right now and a shortcut to the Mac's full process inspector.
-- **Menu bar readouts.** Keep the readings you care about in the bar itself, with values or compact usage bars, including optional battery time remaining and fan speed, combined or as separate items.
+- **Menu bar readouts.** Keep the readings you care about in the bar itself, with values or compact usage bars chosen per reading, including optional battery time remaining and fan speed, combined or as separate items. Battery bars use the native Mac battery, lightning and cable icons.
 - **Network.** Live rates, session totals and a built in speed test.
 - **Alerts.** Optional notifications for sustained CPU load, high CPU or battery temperature, memory pressure, low disk space and low battery.
 
