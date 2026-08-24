@@ -261,7 +261,13 @@ enum DefaultsKey {
     static let menuBarFanSpeed = "menuBarFanSpeed"
     static let menuBarPreset = "menuBarPreset"           // dense
     static let menuBarMetricSpacing = "menuBarMetricSpacing" // standard | compact
-    static let menuBarMetricAppearance = "menuBarMetricAppearance" // values | bars
+    static let menuBarMetricAppearance = "menuBarMetricAppearance" // values | bars, fallback for per-item keys
+    static let menuBarCPUAppearance = "menuBarCPUAppearance" // values | bars | empty inherits global
+    static let menuBarGPUAppearance = "menuBarGPUAppearance" // values | bars | empty inherits global
+    static let menuBarMemoryAppearance = "menuBarMemoryAppearance" // values | bars | empty inherits global
+    static let menuBarDiskUsageAppearance = "menuBarDiskUsageAppearance" // values | bars | empty inherits global
+    static let menuBarBatteryAppearance = "menuBarBatteryAppearance" // values | bars | empty inherits global
+    static let menuBarPeripheralBatteryAppearance = "menuBarPeripheralBatteryAppearance" // values | bars | empty inherits global
     static let menuBarUsageBarNormalColor = "menuBarUsageBarNormalColor" // #RRGGBB
     static let menuBarUsageBarElevatedColor = "menuBarUsageBarElevatedColor" // #RRGGBB
     static let menuBarUsageBarCriticalColor = "menuBarUsageBarCriticalColor" // #RRGGBB
@@ -971,6 +977,12 @@ enum Defaults {
         DefaultsKey.menuBarPreset: "dense",
         DefaultsKey.menuBarMetricSpacing: "compact",  // owner's call: compact by default in 3.1.8
         DefaultsKey.menuBarMetricAppearance: "values",
+        DefaultsKey.menuBarCPUAppearance: "",
+        DefaultsKey.menuBarGPUAppearance: "",
+        DefaultsKey.menuBarMemoryAppearance: "",
+        DefaultsKey.menuBarDiskUsageAppearance: "",
+        DefaultsKey.menuBarBatteryAppearance: "",
+        DefaultsKey.menuBarPeripheralBatteryAppearance: "",
         DefaultsKey.menuBarUsageBarNormalColor: "#64D2FF",
         DefaultsKey.menuBarUsageBarElevatedColor: "#FFD60A",
         DefaultsKey.menuBarUsageBarCriticalColor: "#FF453A",
@@ -1482,6 +1494,12 @@ enum Defaults {
 
     static func sanitizedMenuBarMetricAppearance(_ appearance: String) -> String {
         allowedMenuBarMetricAppearances.contains(appearance) ? appearance : "values"
+    }
+
+    /// Empty means "inherit the global usage display". Anything else is
+    /// coerced to values or bars so a corrupt per-item key cannot stick.
+    static func sanitizedMenuBarMetricItemAppearance(_ appearance: String) -> String {
+        appearance.isEmpty ? "" : sanitizedMenuBarMetricAppearance(appearance)
     }
 
     static func sanitizedMenuBarMetricOrder(_ raw: String) -> [String] {
