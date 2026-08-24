@@ -168,6 +168,11 @@ final class AppSwitcher: ObservableObject {
             startObservingKeyboardLayout()
             startObservingWake()
             installTap()
+            // A live tap can pick up a shortcut change without rebuilding;
+            // apply here so the native hotkeys follow immediately.
+            if isRunning {
+                applyNativeHotkeySuppression()
+            }
             // Build the panel and its SwiftUI tree now: the first hosting-view
             // render costs hundreds of milliseconds, far too slow to pay on
             // the first ⌘Tab.
@@ -179,6 +184,7 @@ final class AppSwitcher: ObservableObject {
                 WindowPreviewProvider.shared.startWarming()
             }
         } else {
+            restoreNativeHotkeys()
             stopObservingKeyboardLayout()
             stopObservingWake()
             removeTap()
@@ -190,6 +196,7 @@ final class AppSwitcher: ObservableObject {
     /// resets its own permissions, so a revoked Accessibility grant can never
     /// leave a live tap behind.
     func suspend() {
+        restoreNativeHotkeys()
         stopObservingWake()
         routeLock.withLock { routeCanStartSession = false }
         removeTap()
@@ -348,6 +355,9 @@ final class AppSwitcher: ObservableObject {
                 userInfo: Unmanaged.passUnretained(self).toOpaque()
             ) else {
                 _ = clearEventTapThread()
+                // Without a tap there is nothing to replace ⌘Tab, so give the
+                // system switcher back rather than leaving the shortcut dead.
+                DispatchQueue.main.async { SwitcherNativeHotkeys.apply([]) }
                 return
             }
 
@@ -363,6 +373,9 @@ final class AppSwitcher: ObservableObject {
             if shouldStop {
                 CGEvent.tapEnable(tap: tap, enable: false)
             } else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.applyNativeHotkeySuppressionIfTapLive()
+                }
                 CFRunLoopRun()
             }
 
@@ -370,6 +383,27 @@ final class AppSwitcher: ObservableObject {
             CFRunLoopRemoveSource(runLoop, source, .commonModes)
             if clearEventTapThread() { installTap() }
         }
+    }
+
+    /// Dock's ⌘Tab handler is a symbolic hotkey, not an event the session tap
+    /// can swallow. Switch those hotkeys off only while this tap is actually
+    /// installed, so a missing Accessibility grant never kills both switchers.
+    private func applyNativeHotkeySuppression() {
+        let (apps, windows) = routeLock.withLock { (routeShortcut, routeWindowShortcut) }
+        SwitcherNativeHotkeys.apply(
+            SwitcherSupport.nativeHotkeysToSuppress(appsShortcut: apps, windowShortcut: windows)
+        )
+    }
+
+    private func applyNativeHotkeySuppressionIfTapLive() {
+        let tapLive = lifecycleLock.withLock { tap != nil && !shouldStopTapThread }
+        let canStart = routeLock.withLock { routeCanStartSession }
+        guard tapLive, canStart else { return }
+        applyNativeHotkeySuppression()
+    }
+
+    private func restoreNativeHotkeys() {
+        SwitcherNativeHotkeys.apply([])
     }
 
     private func clearEventTapThread() -> Bool {
