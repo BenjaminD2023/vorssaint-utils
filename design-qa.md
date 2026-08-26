@@ -64,4 +64,16 @@
 - Image quality and asset fidelity: battery and plug remain Apple SF Symbols rendered at native density; no raster substitute or handcrafted icon was introduced.
 - Copy and content: both compared states show the live `90%` value.
 
+**Vertical Padding Iteration**
+
+- Source visual truth: `/var/folders/x4/yrl59l7x0n3gqkxb2qzvsk940000gn/T/codex-clipboard-9b0ecbd5-d0e9-4406-80bd-71250c6f75d6.png` (164 × 30 px at 1×).
+- Rendered implementation: `/tmp/vorssaint-padding-after-target.png` (150 × 30 px at 1×), captured from the installed `/Applications/Vorssaint.app` on macOS 26.4.1.
+- Combined comparison: `/tmp/vorssaint-padding-before-after.png` (220 × 30 px), with the reported state on the left and the revised live state on the right.
+- Viewport and state: native 30 px menu bar, 90% battery and 34° battery temperature. The power-source glyph changed during the live capture, but the shared attachment bounds and typography used for the padding measurement did not.
+- Initial P2 finding: visible ink occupied `y = 5...21`, leaving 5 px above and 8 px below, so the group was visibly high.
+- Fix: restore the shared macOS 26 attachment correction from a 0.25 pt to a 1.2 pt downward nudge for battery, metric, gauge, network, and disk blocks.
+- Post-fix evidence: visible ink occupies `y = 6...22`, leaving 6 px above and 7 px below. That is the pixel-balanced placement for 17 px of ink in a 30 px bar.
+- Full-view and focused evidence use the same combined image because the complete source is already a focused menu-bar crop.
+- Fonts and typography, colors and visual tokens, image quality, horizontal spacing, and copy are unchanged from the prior passed live iteration.
+
 final result: passed
