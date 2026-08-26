@@ -94,6 +94,8 @@ final class AppSwitcher: ObservableObject {
     private var keyboardLayoutObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var wakeRetry: DispatchWorkItem?
+    /// Keeps Dock's symbolic hotkeys and the event tap in the same live state.
+    private var takeoverWatchdog: Timer?
 
     /// The little state the tap thread needs to route an event without
     /// touching the main thread; mutated only under `routeLock`.
@@ -150,9 +152,6 @@ final class AppSwitcher: ObservableObject {
 
     private init() {}
 
-    /// True while the event tap is installed.
-    var isRunning: Bool { lifecycleLock.withLock { tap != nil } }
-
     /// Applies the persisted preference; safe to call repeatedly.
     func syncWithPreferences() {
         let shortcut = GlobalShortcut.saved(for: DefaultsKey.switcherShortcut,
@@ -173,9 +172,7 @@ final class AppSwitcher: ObservableObject {
             installTap()
             // A live tap can pick up a shortcut change without rebuilding;
             // apply here so the native hotkeys follow immediately.
-            if isRunning {
-                applyNativeHotkeySuppression()
-            }
+            applyNativeHotkeySuppressionIfTapLive()
             // Build the panel and its SwiftUI tree now: the first hosting-view
             // render costs hundreds of milliseconds, far too slow to pay on
             // the first ⌘Tab.
@@ -240,12 +237,19 @@ final class AppSwitcher: ObservableObject {
     }
 
     private func startObservingWake() {
-        guard wakeObserver == nil else { return }
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in self?.recoverTapAfterWake() }
+        if wakeObserver == nil {
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in self?.recoverTapAfterWake() }
+        }
+        guard takeoverWatchdog == nil else { return }
+        let watchdog = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            self?.reconcileTakeover()
+        }
+        RunLoop.main.add(watchdog, forMode: .common)
+        takeoverWatchdog = watchdog
     }
 
     private func stopObservingWake() {
@@ -255,19 +259,21 @@ final class AppSwitcher: ObservableObject {
         wakeObserver = nil
         wakeRetry?.cancel()
         wakeRetry = nil
+        takeoverWatchdog?.invalidate()
+        takeoverWatchdog = nil
     }
 
     private func recoverTapAfterWake() {
-        recoverTapIfNeeded()
+        reconcileTakeover()
         wakeRetry?.cancel()
-        // Input services can settle after the workspace wake itself. Recheck
-        // once so a tap disabled during that window never stays silent.
-        let retry = DispatchWorkItem { [weak self] in self?.recoverTapIfNeeded() }
+        // Input services and Dock hotkeys can settle after the workspace wake
+        // itself. Recheck once so neither half of the takeover stays stale.
+        let retry = DispatchWorkItem { [weak self] in self?.reconcileTakeover() }
         wakeRetry = retry
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: retry)
     }
 
-    private func recoverTapIfNeeded() {
+    private func reconcileTakeover() {
         guard AppFeature.switcher.isAvailable,
               UserDefaults.standard.bool(forKey: DefaultsKey.switcherEnabled),
               Permissions.shared.accessibility else { return }
@@ -276,9 +282,13 @@ final class AppSwitcher: ObservableObject {
             guard let tap else { return true }
             return !CFMachPortIsValid(tap) || !CGEvent.tapIsEnabled(tap: tap)
         }
-        guard needsRecovery else { return }
-        removeTap()
-        installTap()
+        if needsRecovery {
+            restoreNativeHotkeys()
+            removeTap()
+            installTap()
+        } else {
+            applyNativeHotkeySuppressionIfTapLive()
+        }
     }
 
     private func installTap() {
@@ -399,7 +409,10 @@ final class AppSwitcher: ObservableObject {
     }
 
     private func applyNativeHotkeySuppressionIfTapLive() {
-        let tapLive = lifecycleLock.withLock { tap != nil && !shouldStopTapThread }
+        let tapLive = lifecycleLock.withLock {
+            guard let tap, !shouldStopTapThread else { return false }
+            return CFMachPortIsValid(tap) && CGEvent.tapIsEnabled(tap: tap)
+        }
         let canStart = routeLock.withLock { routeCanStartSession }
         guard tapLive, canStart else { return }
         applyNativeHotkeySuppression()

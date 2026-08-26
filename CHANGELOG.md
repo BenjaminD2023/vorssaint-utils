@@ -13,8 +13,10 @@ All notable changes to this project are documented here. The format follows
   page, and under Energy. While plugged in, Discharge and Top up sit under
   Battery in the menu bar panel; Discharge drains to the limit and Top up
   temporarily charges to 100%.
-- The menu bar battery reading shows a yellow dot while Low Power Mode is on.
-  Numeric battery values also show a green dot while charging.
+- The menu bar battery icon turns yellow while Low Power Mode is on, matching
+  the system battery indicator.
+- The menu bar battery icon uses the system battery symbol (live fill, Control
+  Center size), so it matches the macOS menu bar extra.
 
 ### Changed
 - Menu bar CPU, GPU, memory, disk usage, battery and accessory batteries can
@@ -26,6 +28,8 @@ All notable changes to this project are documented here. The format follows
 - App Switcher overflow-row edge hover bounces back at the end of the row.
 
 ### Fixed
+- Window edge snapping now works at edges shared with another display while
+  still allowing windows to be dragged across displays.
 - The Charge Limit slider can be dragged in Settings and in the menu bar panel.
 - Charge Limit no longer calls an M-series Mac unsupported from a userspace
   SMC probe; the privileged helper decides, and CHTE/CH0C size differences

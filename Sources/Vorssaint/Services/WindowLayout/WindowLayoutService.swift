@@ -1160,7 +1160,8 @@ final class WindowLayoutService: ObservableObject {
                 pointerStart: drag.pointerStart,
                 pointerNow: releaseLocation
               ) == .moving,
-              let target = edgeSnapTarget(atQuartzPoint: releaseLocation)
+              let target = edgeSnapTarget(atQuartzPoint: releaseLocation,
+                                          dragOrigin: drag.pointerStart)
         else { return }
         applyEdgeSnap(drag, target: target)
     }
@@ -1239,7 +1240,8 @@ final class WindowLayoutService: ObservableObject {
             }
         }
 
-        let target = edgeSnapTarget(atQuartzPoint: location)
+        let target = edgeSnapTarget(atQuartzPoint: location,
+                                    dragOrigin: drag.pointerStart)
         if target != drag.target {
             drag.target = target
             if let target {
@@ -1251,13 +1253,17 @@ final class WindowLayoutService: ObservableObject {
         edgeSnapDrag = drag
     }
 
-    private func edgeSnapTarget(atQuartzPoint point: CGPoint) -> WindowEdgeSnapTarget? {
-        let appKitPoint = CGPoint(x: point.x, y: menuBarScreenTopY - point.y)
+    private func edgeSnapTarget(atQuartzPoint point: CGPoint,
+                                dragOrigin: CGPoint) -> WindowEdgeSnapTarget? {
+        let top = menuBarScreenTopY
+        let appKitPoint = CGPoint(x: point.x, y: top - point.y)
+        let appKitDragOrigin = CGPoint(x: dragOrigin.x, y: top - dragOrigin.y)
         let screens = NSScreen.screens.map {
             WindowEdgeSnapScreen(frame: $0.frame, visibleFrame: $0.visibleFrame)
         }
         return WindowEdgeSnapSupport.target(at: appKitPoint,
-                                            screens: screens)
+                                            screens: screens,
+                                            dragOrigin: appKitDragOrigin)
     }
 
     private func edgeSnapQuartzScreenFrames() -> [CGRect] {

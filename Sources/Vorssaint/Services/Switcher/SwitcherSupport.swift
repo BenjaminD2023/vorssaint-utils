@@ -1002,10 +1002,12 @@ enum SwitcherSupport {
     static func shouldContinueFocusRetry(targetPID: pid_t,
                                          sourcePID: pid_t?,
                                          frontmostPID: pid_t?,
+                                         targetIsFocused: Bool = false,
                                          targetIsMinimized: Bool,
                                          targetStartedMinimized: Bool,
                                          targetWasObservedRestored: Bool = false,
                                          ownPID: pid_t = ProcessInfo.processInfo.processIdentifier) -> Bool {
+        guard !targetIsFocused else { return false }
         guard !targetIsMinimized
                 || (targetStartedMinimized && !targetWasObservedRestored)
         else { return false }
@@ -1048,8 +1050,9 @@ enum SwitcherSupport {
     }
 
     static func nativeHotkeyTransition(from current: Set<SwitcherNativeSymbolicHotKey>,
-                                       to desired: Set<SwitcherNativeSymbolicHotKey>) -> SwitcherNativeHotkeyTransition {
-        SwitcherNativeHotkeyTransition(suppress: desired.subtracting(current),
+                                       to desired: Set<SwitcherNativeSymbolicHotKey>,
+                                       currentlyEnabled: Set<SwitcherNativeSymbolicHotKey>) -> SwitcherNativeHotkeyTransition {
+        SwitcherNativeHotkeyTransition(suppress: desired.intersection(currentlyEnabled),
                                        restore: current.subtracting(desired))
     }
 

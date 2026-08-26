@@ -11,8 +11,7 @@ private let switcherAXPressedNotification = "AXPressed"
 /// owning app. The focus pass is repeated after activation because Space changes
 /// are asynchronous and some apps settle their main window one run-loop later.
 enum WindowActivator {
-    private static let focusRetryDelay: TimeInterval = 0.12
-    private static let fullscreenFocusRetryDelays: [TimeInterval] = [0.18, 0.38, 0.68]
+    private static let focusRetryDelays: [TimeInterval] = [0.18, 0.38, 0.68]
     private static var pendingMinimizeRestore: SwitcherWindowMinimizeRestore?
     private static var pendingWindowClose: SwitcherPendingWindowClose?
     private static let activationLock = NSLock()
@@ -59,7 +58,7 @@ enum WindowActivator {
                                              allWindows: activationPlan.activateAllWindows,
                                              state: retryState,
                                              generation: generation,
-                                             delays: Self.fullscreenFocusRetryDelays)
+                                             delays: Self.focusRetryDelays)
             }
             return
         }
@@ -94,7 +93,7 @@ enum WindowActivator {
             )
             activateApp(app, allWindows: activationPlan.activateAllWindows)
             guard retry else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.fullscreenFocusRetryDelays[0]) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusRetryDelays[0]) {
                     guard isCurrentActivation(generation),
                           shouldContinueFocusRetry(windowID: windowID,
                                                    targetPID: item.pid,
@@ -127,7 +126,7 @@ enum WindowActivator {
                                   state: retryState,
                                   activationPlan: activationPlan,
                                   generation: generation,
-                                  delays: Self.fullscreenFocusRetryDelays)
+                                  delays: Self.focusRetryDelays)
             return
         }
 
@@ -159,7 +158,7 @@ enum WindowActivator {
                               state: retryState,
                               activationPlan: activationPlan,
                               generation: generation,
-                              delays: [focusRetryDelay])
+                              delays: Self.focusRetryDelays)
     }
 
     static func activate(pid: pid_t, windowID: CGWindowID?, appName: String, retry: Bool = true) {
@@ -488,6 +487,7 @@ enum WindowActivator {
             targetPID: targetPID,
             sourcePID: sourcePID,
             frontmostPID: frontmostPID,
+            targetIsFocused: focusedWindowID(for: targetWindowOwnerPID) == windowID,
             targetIsMinimized: minimizedState == true,
             targetStartedMinimized: state.targetStartedMinimized,
             targetWasObservedRestored: state.targetWasObservedRestored

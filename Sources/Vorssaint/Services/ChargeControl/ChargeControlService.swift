@@ -27,6 +27,8 @@ final class ChargeControlService: ObservableObject {
     @Published private(set) var hasBattery = PowerSampler.hasInternalBattery
     @Published private(set) var enabled = true
     @Published private(set) var limitPercent = ChargeControlPolicy.defaultLimit
+    @Published private(set) var sailingEnabled = false
+    @Published private(set) var sailingMinimumPercent = ChargeControlPolicy.defaultSailingMinimum
     @Published private(set) var mode: ChargeControlMode = .limit
     @Published private(set) var appliedGate: ChargeControlGate = .allowCharging
     @Published private(set) var now = Date()
@@ -197,8 +199,20 @@ final class ChargeControlService: ObservableObject {
         let cap = ChargeControlPolicy.sanitizedLimit(percent)
         UserDefaults.standard.set(cap, forKey: DefaultsKey.chargeLimitPercent)
         limitPercent = cap
+        setSailingMinimum(sailingMinimumPercent, evaluateAfterChange: false)
         ensureHelperForControl()
         evaluate()
+    }
+
+    func setSailingEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: DefaultsKey.chargeSailingEnabled)
+        sailingEnabled = enabled
+        ensureHelperForControl()
+        evaluate()
+    }
+
+    func setSailingMinimum(_ percent: Int) {
+        setSailingMinimum(percent, evaluateAfterChange: true)
     }
 
     func startDischargeToLimit() {
@@ -313,6 +327,7 @@ final class ChargeControlService: ObservableObject {
         let gate = ChargeControlPolicy.desiredGate(
             chargePercent: chargePercent ?? 0,
             limit: limitPercent,
+            sailingMinimum: sailingEnabled ? sailingMinimumPercent : nil,
             wasInhibited: appliedGate == .inhibitCharging,
             mode: mode,
             family: profile?.family ?? snapshot.profile?.family)
@@ -522,11 +537,13 @@ final class ChargeControlService: ObservableObject {
     }
 
     private func apply(_ response: ChargeControlResponse) {
+        let gateChanged = response.succeeded && appliedGate != response.snapshot.gate
         snapshot = response.snapshot
         if let profile = response.snapshot.profile { self.profile = profile }
         error = response.error
         if response.succeeded { appliedGate = response.snapshot.gate }
         now = Date()
+        if gateChanged { SystemMonitor.shared.powerStateDidChange() }
     }
 
     private func beginRequest() -> Int {
@@ -615,7 +632,21 @@ final class ChargeControlService: ObservableObject {
         let defaults = UserDefaults.standard
         enabled = defaults.object(forKey: DefaultsKey.chargeLimitEnabled) as? Bool ?? true
         limitPercent = ChargeControlPolicy.sanitizedLimit(defaults.integer(forKey: DefaultsKey.chargeLimitPercent))
+        sailingEnabled = defaults.bool(forKey: DefaultsKey.chargeSailingEnabled)
+        sailingMinimumPercent = ChargeControlPolicy.sanitizedSailingMinimum(
+            defaults.integer(forKey: DefaultsKey.chargeSailingMinimumPercent),
+            limit: limitPercent)
         hasBattery = PowerSampler.hasInternalBattery
+    }
+
+    private func setSailingMinimum(_ percent: Int, evaluateAfterChange: Bool) {
+        let minimum = ChargeControlPolicy.sanitizedSailingMinimum(percent, limit: limitPercent)
+        UserDefaults.standard.set(minimum, forKey: DefaultsKey.chargeSailingMinimumPercent)
+        sailingMinimumPercent = minimum
+        if evaluateAfterChange {
+            ensureHelperForControl()
+            evaluate()
+        }
     }
 
     private func cancelTransientModes() {

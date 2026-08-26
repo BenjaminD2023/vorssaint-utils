@@ -459,13 +459,17 @@ enum WindowEdgeSnapSupport {
 
     /// Resolves the hot zone under an AppKit-coordinate pointer. Screen frames
     /// choose the reachable edge; visible frames keep the result clear of the
-    /// menu bar and Dock. A seam shared by two displays is not an edge, so a
-    /// window can cross it without being caught halfway through. The top edge
+    /// menu bar and Dock. At a seam shared by two displays, the screen where
+    /// the drag began owns the edge until the pointer crosses it. The top edge
     /// tiles the upper half on first contact; continuing through the menu bar
     /// fills the screen, and the live preview uses the same split.
     static func target(at point: CGPoint,
                        screens: [WindowEdgeSnapScreen],
-                       distance: CGFloat = activationDistance) -> WindowEdgeSnapTarget? {
+                       distance: CGFloat = activationDistance,
+                       dragOrigin: CGPoint? = nil) -> WindowEdgeSnapTarget? {
+        let dragScreenIndex = dragOrigin.flatMap { origin in
+            screens.indices.first { inclusiveContains(screens[$0].frame, origin) }
+        }
         let ordered = screens.enumerated().sorted {
             distanceSquared(from: point, to: $0.element.frame)
                 < distanceSquared(from: point, to: $1.element.frame)
@@ -483,20 +487,25 @@ enum WindowEdgeSnapSupport {
             let otherFrames = screens.enumerated().compactMap { offset, value in
                 offset == index ? nil : value.frame
             }
+            let ownsSharedEdge = dragScreenIndex == index && inclusiveContains(frame, point)
             let nearLeft = abs(point.x - frame.minX) <= distance
-                && !hasNeighbor(beyond: .left, point: point, distance: distance, frames: otherFrames)
+                && (ownsSharedEdge
+                    || !hasNeighbor(beyond: .left, point: point, distance: distance, frames: otherFrames))
             let nearRight = abs(point.x - frame.maxX) <= distance
-                && !hasNeighbor(beyond: .right, point: point, distance: distance, frames: otherFrames)
+                && (ownsSharedEdge
+                    || !hasNeighbor(beyond: .right, point: point, distance: distance, frames: otherFrames))
             let visibleTop = min(max(screen.visibleFrame.maxY, frame.minY), frame.maxY)
             let physicalTop = CGPoint(x: point.x, y: frame.maxY)
             let nearTop = point.y >= visibleTop - distance
                 && point.y <= frame.maxY + distance
-                && !hasNeighbor(beyond: .top,
-                                point: physicalTop,
-                                distance: distance,
-                                frames: otherFrames)
+                && (ownsSharedEdge
+                    || !hasNeighbor(beyond: .top,
+                                    point: physicalTop,
+                                    distance: distance,
+                                    frames: otherFrames))
             let nearBottom = abs(point.y - frame.minY) <= distance
-                && !hasNeighbor(beyond: .bottom, point: point, distance: distance, frames: otherFrames)
+                && (ownsSharedEdge
+                    || !hasNeighbor(beyond: .bottom, point: point, distance: distance, frames: otherFrames))
             guard nearLeft || nearRight || nearTop || nearBottom else { continue }
 
             let horizontalCorner = min(max(frame.width * 0.18, 96), 180)

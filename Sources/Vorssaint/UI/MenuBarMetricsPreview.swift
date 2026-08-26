@@ -176,27 +176,20 @@ struct MenuBarMetricsPreview: View {
             .frame(width: MenuBarRenderer.rateBlockWidth(style: style),
                    height: style == .readable ? 22 : 20,
                    alignment: .center)
-        case let .batteryBlock(percent, isCharging, isPluggedIn, style):
-            HStack(spacing: style == .readable ? 5 : 4) {
+        case let .batteryBlock(percent, isCharging, isPluggedIn, lowPowerMode, _):
+            HStack(spacing: 3) {
                 Text("\(max(0, min(100, percent)))%")
-                    .font(.system(size: style == .readable ? 13 : 12,
-                                  weight: .semibold,
-                                  design: .monospaced))
-                    .frame(minWidth: style == .readable ? 33 : 30, alignment: .leading)
-                Image(systemName: MenuBarRenderer.batterySymbol(for: percent,
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white)
+                Image(nsImage: MenuBarBatterySupport.glyphImage(percent: percent,
                                                                 isCharging: isCharging,
-                                                                isPluggedIn: isPluggedIn))
-                    .font(.system(size: style == .readable ? 17 : 15.5, weight: .regular))
-                    .symbolRenderingMode(.hierarchical)
+                                                                isPluggedIn: isPluggedIn,
+                                                                lowPowerMode: lowPowerMode,
+                                                                tint: .white))
+                    .frame(width: MenuBarBatterySupport.glyphSize.width,
+                           height: MenuBarBatterySupport.glyphSize.height)
             }
-            .foregroundStyle(.white)
             .fixedSize(horizontal: true, vertical: true)
-        case let .batteryStatusDot(style, dot):
-            Circle()
-                .fill(Color(nsColor: dot.color))
-                .frame(width: style == .readable ? 5.2 : 4.8,
-                       height: style == .readable ? 5.2 : 4.8)
-                .padding(.leading, 3)
         case let .dot(pressure):
             Circle()
                 .fill(dotColor(pressure))

@@ -2644,15 +2644,66 @@ struct MetricsTests {
                "charging uses the native lightning battery")
         expect(MenuBarBatterySupport.symbolName(for: 80, isCharging: false, isPluggedIn: true)
                 == "powercord.fill",
-               "plugged in without charging uses the native cable")
-        expect(MenuBarBatteryDot.current(isCharging: true, lowPowerMode: true, nativeChargingIcon: false)
-                == .charging
-                && MenuBarBatteryDot.current(isCharging: true, lowPowerMode: true, nativeChargingIcon: true)
-                == .lowPower
-                && MenuBarBatteryDot.current(isCharging: false, lowPowerMode: true)
-                == .lowPower
-                && MenuBarBatteryDot.current(isCharging: false, lowPowerMode: false) == nil,
-               "numeric battery values get a charging dot; native bars keep Low Power Mode")
+               "plugged in without charging uses the power-cord state")
+        expect(MenuBarBatterySupport.symbolColor(lowPowerMode: true) == MenuBarBatterySupport.lowPowerColor
+                && MenuBarBatterySupport.symbolColor(lowPowerMode: false) == MenuBarBatterySupport.valueColor,
+               "Low Power Mode tints the native battery icon yellow")
+        var lightBatteryText = NSColor.clear
+        var darkBatteryText = NSColor.clear
+        NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
+            lightBatteryText = MenuBarBatterySupport.valueColor.usingColorSpace(.sRGB) ?? .clear
+        }
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            darkBatteryText = MenuBarBatterySupport.valueColor.usingColorSpace(.sRGB) ?? .clear
+        }
+        expect(lightBatteryText.redComponent < 0.1
+                && darkBatteryText.redComponent > 0.9
+                && lightBatteryText.alphaComponent == 1
+                && darkBatteryText.alphaComponent == 1,
+               "native battery text follows light and dark menu bar appearances")
+        expect(MenuBarBatterySupport.glyphSize.width >= 30
+                && MenuBarBatterySupport.glyphSize.width <= 32
+                && MenuBarBatterySupport.glyphSize.height >= 13
+                && MenuBarBatterySupport.glyphSize.height <= 15,
+               "menu bar battery matches the native status-item symbol size")
+        expect(MenuBarBatterySupport.glyphImage(percent: 63,
+                                                isCharging: true,
+                                                isPluggedIn: false,
+                                                lowPowerMode: false).size
+                == MenuBarBatterySupport.glyphSize,
+               "charging battery composition preserves the native glyph size")
+        let pluggedLowBattery = MenuBarBatterySupport.glyphImage(percent: 20,
+                                                                 isCharging: false,
+                                                                 isPluggedIn: true,
+                                                                 lowPowerMode: false)
+        let pluggedHighBattery = MenuBarBatterySupport.glyphImage(percent: 80,
+                                                                  isCharging: false,
+                                                                  isPluggedIn: true,
+                                                                  lowPowerMode: false)
+        expect(pluggedLowBattery.tiffRepresentation != pluggedHighBattery.tiffRepresentation,
+               "plugged battery glyph keeps tracking the live charge")
+        let chargingHighBattery = MenuBarBatterySupport.glyphImage(percent: 80,
+                                                                   isCharging: true,
+                                                                   isPluggedIn: false,
+                                                                   lowPowerMode: false)
+        expect(chargingHighBattery.tiffRepresentation != pluggedHighBattery.tiffRepresentation,
+               "battery glyph reflects a charging-state change at the same level")
+        expectClose(Double(MenuBarBatterySupport.fillFraction(63)), 0.63,
+                    "native battery fill follows the live charge")
+        expectClose(Double(MenuBarBatterySupport.fillFraction(150)), 1,
+                    "native battery fill clamps above full")
+        let batteryBounds = NSRect(origin: .zero, size: MenuBarBatterySupport.glyphSize)
+        let fullBatteryWidth = MenuBarBatterySupport.fillRect(in: batteryBounds, percent: 100).width
+        expectClose(Double(MenuBarBatterySupport.fillRect(in: batteryBounds, percent: 13).width / fullBatteryWidth), 0.13,
+                    "low battery fill stays linear")
+        expectClose(Double(MenuBarBatterySupport.fillRect(in: batteryBounds, percent: 90).width / fullBatteryWidth), 0.90,
+                    "high battery fill stays linear")
+        let unpluggedHighBattery = MenuBarBatterySupport.glyphImage(percent: 80,
+                                                                    isCharging: false,
+                                                                    isPluggedIn: false,
+                                                                    lowPowerMode: false)
+        expect(pluggedHighBattery.tiffRepresentation != unpluggedHighBattery.tiffRepresentation,
+               "plugged in without charging draws the plug inside the battery")
         expectClose(MenuBarUsageBarSupport.percentFraction(80), 0.8,
                     "menu bar battery bars map a percent onto the 0...1 fill")
         expectClose(MenuBarUsageBarSupport.percentFraction(150), 1,
@@ -4060,6 +4111,18 @@ struct MetricsTests {
                                             screens: [snapScreen, rightSnapScreen],
                                             distance: 30) == nil,
                "the whole activation band around a shared seam stays open")
+        expect(WindowEdgeSnapSupport.target(at: CGPoint(x: 1440, y: 450),
+                                            screens: [snapScreen, rightSnapScreen],
+                                            dragOrigin: CGPoint(x: 1800, y: 450))?.action == .leftHalf
+               && WindowEdgeSnapSupport.target(at: CGPoint(x: 1440, y: 450),
+                                                screens: [snapScreen, rightSnapScreen],
+                                                dragOrigin: CGPoint(x: 1800, y: 450))?.visibleFrame
+                    == rightSnapScreen.visibleFrame,
+               "a shared seam snaps within the display where the drag began")
+        expect(WindowEdgeSnapSupport.target(at: CGPoint(x: 1435, y: 450),
+                                            screens: [snapScreen, rightSnapScreen],
+                                            dragOrigin: CGPoint(x: 1800, y: 450)) == nil,
+               "crossing a shared seam keeps moving into the neighboring display")
         let upperSnapScreen = WindowEdgeSnapScreen(
             frame: CGRect(x: 0, y: 900, width: 1280, height: 800),
             visibleFrame: CGRect(x: 0, y: 900, width: 1280, height: 775)
@@ -8542,6 +8605,14 @@ struct MetricsTests {
                                                         targetStartedMinimized: false,
                                                         ownPID: 99),
                "App Switcher focus retries can continue while the selected target app is still active")
+        expect(!SwitcherSupport.shouldContinueFocusRetry(targetPID: 10,
+                                                         sourcePID: 20,
+                                                         frontmostPID: 10,
+                                                         targetIsFocused: true,
+                                                         targetIsMinimized: false,
+                                                         targetStartedMinimized: false,
+                                                         ownPID: 99),
+               "App Switcher focus retries stop once the selected window is focused")
         expect(SwitcherSupport.shouldContinueFocusRetry(targetPID: 10,
                                                         sourcePID: 20,
                                                         frontmostPID: 20,
@@ -8666,13 +8737,22 @@ struct MetricsTests {
                     windowShortcut: GlobalShortcut(keyCode: Int64(kVK_ANSI_A), modifiers: [.command]))
                .isEmpty,
                "⌘⌥Tab is not the system switcher")
-        expect(SwitcherSupport.nativeHotkeyTransition(from: [], to: [.commandTab, .commandShiftTab])
+        expect(SwitcherSupport.nativeHotkeyTransition(from: [],
+                                                      to: [.commandTab, .commandShiftTab],
+                                                      currentlyEnabled: Set(SwitcherNativeSymbolicHotKey.allCases))
                == SwitcherNativeHotkeyTransition(suppress: [.commandTab, .commandShiftTab], restore: [])
                && SwitcherSupport.nativeHotkeyTransition(
-                    from: Set(SwitcherNativeSymbolicHotKey.allCases), to: [])
+                    from: Set(SwitcherNativeSymbolicHotKey.allCases),
+                    to: [],
+                    currentlyEnabled: [])
                == SwitcherNativeHotkeyTransition(suppress: [],
-                                                 restore: Set(SwitcherNativeSymbolicHotKey.allCases)),
-               "native hotkey updates only switch off or restore the keys that actually changed")
+                                                 restore: Set(SwitcherNativeSymbolicHotKey.allCases))
+               && SwitcherSupport.nativeHotkeyTransition(
+                    from: [.commandTab],
+                    to: [.commandTab, .commandShiftTab],
+                    currentlyEnabled: [.commandTab])
+               == SwitcherNativeHotkeyTransition(suppress: [.commandTab], restore: []),
+               "native hotkey updates restore ownership, reassert drift, and preserve unowned disabled keys")
         expect(SwitcherSupport.isCurrentActivationGeneration(12, current: 12)
                && !SwitcherSupport.isCurrentActivationGeneration(11, current: 12),
                "App Switcher ignores retries left by an older activation")
@@ -9879,6 +9959,16 @@ struct MetricsTests {
                "monitor tick off the wake grid realigns to the next slot")
         expect(MonitorSamplingPolicy.alignedTick(9, wakeTicks: 1) == 9,
                "monitor tick needs no alignment at every-tick cadence")
+        let powerEventTick = MonitorSamplingPolicy.alignedTick(
+            3,
+            wakeTicks: MonitorSamplingPolicy.sampleStride(for: .power,
+                                                           intervalSeconds: 2,
+                                                           foreground: false))
+        expect(MonitorSamplingPolicy.shouldSample(.power,
+                                                  tick: powerEventTick,
+                                                  intervalSeconds: 2,
+                                                  foreground: false),
+               "power-source events advance to an immediate real power sample")
 
         // MARK: Interface filtering
 
@@ -10183,8 +10273,10 @@ struct MetricsTests {
                "charge limit is an energy feature that polls while it is on")
         expect((Defaults.registeredDefaults[DefaultsKey.panelShowChargeControl] as? Bool) == true
                 && (Defaults.registeredDefaults[DefaultsKey.chargeLimitEnabled] as? Bool) == true
-                && (Defaults.registeredDefaults[DefaultsKey.chargeLimitPercent] as? Int) == 80,
-               "installing charge limit reveals the panel dial at 80 percent")
+                && (Defaults.registeredDefaults[DefaultsKey.chargeLimitPercent] as? Int) == 80
+                && (Defaults.registeredDefaults[DefaultsKey.chargeSailingEnabled] as? Bool) == false
+                && (Defaults.registeredDefaults[DefaultsKey.chargeSailingMinimumPercent] as? Int) == 70,
+               "charge limit starts at 80 percent with optional sailing off")
 
         for language in AppLanguage.allCases {
             let strings = FeatureStrings.diskImageInstaller(language)
@@ -10474,6 +10566,17 @@ struct MetricsTests {
                 && ChargeControlPolicy.sanitizedLimit(5) == 80
                 && Defaults.sanitizedChargeLimit(12) == 80,
                "charge limits stay inside 20...100 and fall back to 80")
+        expect(ChargeControlPolicy.sanitizedSailingMinimum(70, limit: 80) == 70
+                && ChargeControlPolicy.sanitizedSailingMinimum(80, limit: 80) == 79
+                && ChargeControlPolicy.sanitizedSailingMinimum(5, limit: 20) == 10,
+               "sailing minimums stay below their charge limit")
+        expect(ChargeLimitBarSupport.filledSegmentCount(for: 0) == 0
+                && ChargeLimitBarSupport.filledSegmentCount(for: 63) == 13
+                && ChargeLimitBarSupport.filledSegmentCount(for: 100) == 20
+                && ChargeLimitBarSupport.targetFraction(for: 80) == 0.8
+                && !ChargeLimitBarSupport.isAboveLimit(segment: 15, limit: 80)
+                && ChargeLimitBarSupport.isAboveLimit(segment: 16, limit: 80),
+               "charge bars map level and limit onto twenty 5% segments")
         expect(ChargeControlPolicy.desiredGate(chargePercent: 81, limit: 80,
                                                wasInhibited: false, mode: .limit,
                                                family: .appleSiliconCHT) == .inhibitCharging,
@@ -10485,6 +10588,19 @@ struct MetricsTests {
                                                    wasInhibited: true, mode: .limit,
                                                    family: .appleSiliconCHT) == .allowCharging,
                "Apple Silicon uses a 2 percent hysteresis before charging again")
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 71, limit: 80,
+                                               sailingMinimum: 70, wasInhibited: true,
+                                               mode: .limit, family: .appleSiliconCHT) == .inhibitCharging
+                && ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
+                                                   sailingMinimum: 70, wasInhibited: true,
+                                                   mode: .limit, family: .appleSiliconCHT) == .allowCharging
+                && ChargeControlPolicy.desiredGate(chargePercent: 80, limit: 80,
+                                                   sailingMinimum: 70, wasInhibited: false,
+                                                   mode: .limit, family: .intelBCLM) == .inhibitCharging
+                && ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
+                                                   sailingMinimum: 70, wasInhibited: true,
+                                                   mode: .limit, family: .intelBCLM) == .allowCharging,
+               "sailing holds from 80 to 70 percent on Apple Silicon and Intel")
         expect(ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
                                                wasInhibited: false, mode: .limit,
                                                family: .intelBCLM) == .inhibitCharging,
@@ -10531,7 +10647,7 @@ struct MetricsTests {
         for language in AppLanguage.allCases {
             let strings = FeatureStrings.chargeControl(language)
             let values = Mirror(reflecting: strings).children.compactMap { $0.value as? String }
-            expect(values.count == 38 && values.allSatisfy { !$0.isEmpty },
+            expect(values.count == 41 && values.allSatisfy { !$0.isEmpty },
                    "charge control has every localized field for \(language.rawValue)")
             expect(values.allSatisfy { !$0.contains("—") },
                    "charge control text uses human punctuation for \(language.rawValue)")
@@ -14234,6 +14350,8 @@ struct MetricsTests {
                "fan display and cooling preferences travel while helper recovery state stays on one Mac")
         expect(backupKeys.contains(DefaultsKey.chargeLimitEnabled)
                 && backupKeys.contains(DefaultsKey.chargeLimitPercent)
+                && backupKeys.contains(DefaultsKey.chargeSailingEnabled)
+                && backupKeys.contains(DefaultsKey.chargeSailingMinimumPercent)
                 && backupKeys.contains(DefaultsKey.panelShowChargeControl)
                 && !backupKeys.contains(DefaultsKey.chargeControlRecoveryNeeded)
                 && !backupKeys.contains(DefaultsKey.chargeControlHelperVersion),

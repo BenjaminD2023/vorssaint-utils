@@ -301,6 +301,8 @@ enum DefaultsKey {
     static let fanControlHelperVersion = "fanControlHelperVersion"
     static let chargeLimitEnabled = "chargeLimitEnabled"
     static let chargeLimitPercent = "chargeLimitPercent"
+    static let chargeSailingEnabled = "chargeSailingEnabled"
+    static let chargeSailingMinimumPercent = "chargeSailingMinimumPercent"
     static let panelShowChargeControl = "panelShowChargeControl"
     static let chargeControlRecoveryNeeded = "chargeControlRecoveryNeeded"
     static let chargeControlHelperVersion = "chargeControlHelperVersion"
@@ -1015,6 +1017,8 @@ enum Defaults {
         DefaultsKey.fanControlHelperVersion: "",
         DefaultsKey.chargeLimitEnabled: true,
         DefaultsKey.chargeLimitPercent: 80,
+        DefaultsKey.chargeSailingEnabled: false,
+        DefaultsKey.chargeSailingMinimumPercent: 70,
         DefaultsKey.panelShowChargeControl: true,
         DefaultsKey.chargeControlRecoveryNeeded: false,
         DefaultsKey.chargeControlHelperVersion: "",
