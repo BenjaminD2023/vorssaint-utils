@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
-- App Switcher takes over the system Command-Tab switcher while it is enabled.
+- App Switcher can explicitly replace the matching macOS app and window switcher shortcuts, with crash recovery and a windowless-app fallback.
 
 ## [3.3.3-beta.2] - 2026-08-22
 

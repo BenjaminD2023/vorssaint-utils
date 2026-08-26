@@ -208,6 +208,8 @@ extension Strings {
         switcherShortcutHintApps: "アプリ",
         switcherShortcutHintWindows: "ウインドウ",
         switcherWindowShortcutCaption: "最前面のアプリのウインドウ用スイッチャーを開きます。アプリスイッチャー表示中は、選択中のアプリのウインドウを順に切り替えます。",
+        switcherTakeOverSystemShortcuts: "macOS の ⌘Tab と ⌘` を置き換える",
+        switcherTakeOverSystemShortcutsCaption: "Vorssaint のスイッチャーが動作中の間だけ、対応する macOS のアプリとウインドウのショートカットを無効にします。実行中のすべてのアプリに切り替えられます。",
         switcherMergeTabs: "アプリごとに1つにまとめて表示",
         switcherMergeTabsCaption: "スイッチャーで、アプリのすべてのウインドウをウインドウごとではなく1つの項目にまとめます。",
         switcherWindowlessApps: "ウインドウなしのアプリ",

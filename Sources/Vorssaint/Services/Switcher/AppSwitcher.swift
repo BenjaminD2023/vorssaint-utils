@@ -92,6 +92,7 @@ final class AppSwitcher: ObservableObject {
     private var keyboardLayoutObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var wakeRetry: DispatchWorkItem?
+    private var takeoverWatchdog: Timer?
 
     /// The little state the tap thread needs to route an event without
     /// touching the main thread; mutated only under `routeLock`.
@@ -147,9 +148,6 @@ final class AppSwitcher: ObservableObject {
 
     private init() {}
 
-    /// True while the event tap is installed.
-    var isRunning: Bool { lifecycleLock.withLock { tap != nil } }
-
     /// Applies the persisted preference; safe to call repeatedly.
     func syncWithPreferences() {
         let shortcut = GlobalShortcut.saved(for: DefaultsKey.switcherShortcut,
@@ -170,8 +168,10 @@ final class AppSwitcher: ObservableObject {
             installTap()
             // A live tap can pick up a shortcut change without rebuilding;
             // apply here so the native hotkeys follow immediately.
-            if isRunning {
-                applyNativeHotkeySuppression()
+            if !UserDefaults.standard.bool(forKey: DefaultsKey.switcherTakeOverSystemShortcuts) {
+                restoreNativeHotkeys()
+            } else {
+                applyNativeHotkeySuppressionIfTapLive()
             }
             // Build the panel and its SwiftUI tree now: the first hosting-view
             // render costs hundreds of milliseconds, far too slow to pay on
@@ -252,30 +252,38 @@ final class AppSwitcher: ObservableObject {
         wakeObserver = nil
         wakeRetry?.cancel()
         wakeRetry = nil
+        stopTakeoverWatchdog()
     }
 
     private func recoverTapAfterWake() {
-        recoverTapIfNeeded()
+        reconcileTakeover()
         wakeRetry?.cancel()
-        // Input services can settle after the workspace wake itself. Recheck
-        // once so a tap disabled during that window never stays silent.
-        let retry = DispatchWorkItem { [weak self] in self?.recoverTapIfNeeded() }
+        // Input services and Dock hotkeys can settle after the workspace wake
+        // itself. Recheck once so neither half of the takeover stays stale.
+        let retry = DispatchWorkItem { [weak self] in self?.reconcileTakeover() }
         wakeRetry = retry
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: retry)
     }
 
-    private func recoverTapIfNeeded() {
+    private func reconcileTakeover() {
         guard AppFeature.switcher.isAvailable,
               UserDefaults.standard.bool(forKey: DefaultsKey.switcherEnabled),
-              Permissions.shared.accessibility else { return }
+              Permissions.shared.accessibility else {
+            restoreNativeHotkeys()
+            return
+        }
         let needsRecovery = lifecycleLock.withLock {
             guard !shouldStopTapThread else { return false }
             guard let tap else { return true }
             return !CFMachPortIsValid(tap) || !CGEvent.tapIsEnabled(tap: tap)
         }
-        guard needsRecovery else { return }
-        removeTap()
-        installTap()
+        if needsRecovery {
+            restoreNativeHotkeys()
+            removeTap()
+            installTap()
+        } else {
+            applyNativeHotkeySuppressionIfTapLive()
+        }
     }
 
     private func installTap() {
@@ -357,7 +365,7 @@ final class AppSwitcher: ObservableObject {
                 _ = clearEventTapThread()
                 // Without a tap there is nothing to replace ⌘Tab, so give the
                 // system switcher back rather than leaving the shortcut dead.
-                DispatchQueue.main.async { SwitcherNativeHotkeys.apply([]) }
+                DispatchQueue.main.async { [weak self] in self?.restoreNativeHotkeys() }
                 return
             }
 
@@ -390,20 +398,46 @@ final class AppSwitcher: ObservableObject {
     /// installed, so a missing Accessibility grant never kills both switchers.
     private func applyNativeHotkeySuppression() {
         let (apps, windows) = routeLock.withLock { (routeShortcut, routeWindowShortcut) }
+        let takeOver = UserDefaults.standard.bool(
+            forKey: DefaultsKey.switcherTakeOverSystemShortcuts)
         SwitcherNativeHotkeys.apply(
-            SwitcherSupport.nativeHotkeysToSuppress(appsShortcut: apps, windowShortcut: windows)
+            SwitcherSupport.nativeHotkeysToSuppress(
+                takeOverSystemShortcuts: takeOver,
+                appsShortcut: apps,
+                windowShortcut: windows,
+                nativeShortcuts: SwitcherNativeHotkeys.configuredShortcuts())
         )
+        if takeOver { startTakeoverWatchdog() }
+        else { stopTakeoverWatchdog() }
     }
 
     private func applyNativeHotkeySuppressionIfTapLive() {
-        let tapLive = lifecycleLock.withLock { tap != nil && !shouldStopTapThread }
+        let tapLive = lifecycleLock.withLock {
+            guard let tap, !shouldStopTapThread else { return false }
+            return CFMachPortIsValid(tap) && CGEvent.tapIsEnabled(tap: tap)
+        }
         let canStart = routeLock.withLock { routeCanStartSession }
         guard tapLive, canStart else { return }
         applyNativeHotkeySuppression()
     }
 
     private func restoreNativeHotkeys() {
+        stopTakeoverWatchdog()
         SwitcherNativeHotkeys.apply([])
+    }
+
+    private func startTakeoverWatchdog() {
+        guard takeoverWatchdog == nil else { return }
+        let watchdog = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            self?.reconcileTakeover()
+        }
+        RunLoop.main.add(watchdog, forMode: .common)
+        takeoverWatchdog = watchdog
+    }
+
+    private func stopTakeoverWatchdog() {
+        takeoverWatchdog?.invalidate()
+        takeoverWatchdog = nil
     }
 
     private func clearEventTapThread() -> Bool {

@@ -208,6 +208,8 @@ extension Strings {
         switcherShortcutHintApps: "Apps",
         switcherShortcutHintWindows: "Ventanas",
         switcherWindowShortcutCaption: "Abre un selector de las ventanas de la app en primer plano. Con el selector de apps abierto, salta entre las ventanas de la app seleccionada.",
+        switcherTakeOverSystemShortcuts: "Reemplazar ⌘Tab y ⌘` de macOS",
+        switcherTakeOverSystemShortcutsCaption: "Desactiva los atajos correspondientes de macOS solo mientras el selector de Vorssaint está activo. Todas las apps abiertas siguen accesibles.",
         switcherMergeTabs: "Mostrar una entrada por app",
         switcherMergeTabsCaption: "Agrupa todas las ventanas de una app en una sola entrada del selector, en vez de una por ventana.",
         switcherWindowlessApps: "Apps sin ventanas abiertas",

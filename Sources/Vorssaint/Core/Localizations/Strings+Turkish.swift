@@ -208,6 +208,8 @@ extension Strings {
         switcherShortcutHintApps: "Uygulamalar",
         switcherShortcutHintWindows: "Pencereler",
         switcherWindowShortcutCaption: "Ön plandaki uygulamanın pencereleri için bir değiştirici açar. Uygulama değiştirici açıkken seçili uygulamanın pencereleri arasında geçiş yapar.",
+        switcherTakeOverSystemShortcuts: "macOS ⌘Tab ve ⌘` kısayollarını değiştir",
+        switcherTakeOverSystemShortcutsCaption: "Eşleşen macOS uygulama ve pencere kısayollarını yalnızca Vorssaint değiştiricisi etkinken kapatır. Çalışan tüm uygulamalara erişim korunur.",
         switcherMergeTabs: "Uygulama başına bir giriş göster",
         switcherMergeTabsCaption: "Değiştiricide pencere başına bir giriş yerine, bir uygulamanın tüm pencerelerini tek girişte toplar.",
         switcherWindowlessApps: "Açık penceresi olmayan uygulamalar",

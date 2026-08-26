@@ -208,6 +208,8 @@ extension Strings {
         switcherShortcutHintApps: "Apps",
         switcherShortcutHintWindows: "Fenster",
         switcherWindowShortcutCaption: "Öffnet einen Umschalter für die Fenster der vordersten App. Bei geöffnetem App-Umschalter springt er zwischen den Fenstern der ausgewählten App.",
+        switcherTakeOverSystemShortcuts: "macOS-⌘Tab und ⌘` ersetzen",
+        switcherTakeOverSystemShortcutsCaption: "Deaktiviert die passenden macOS-App- und Fensterkurzbefehle nur, solange Vorssaints Umschalter aktiv ist. Alle laufenden Apps bleiben erreichbar.",
         switcherMergeTabs: "Einen Eintrag pro App anzeigen",
         switcherMergeTabsCaption: "Fasst alle Fenster einer App zu einem Eintrag im Umschalter zusammen, statt einen Eintrag pro Fenster.",
         switcherWindowlessApps: "Apps ohne geöffnetes Fenster",

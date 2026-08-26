@@ -209,6 +209,8 @@ extension Strings {
         switcherShortcutHintApps: "앱",
         switcherShortcutHintWindows: "윈도우",
         switcherWindowShortcutCaption: "맨 앞 앱의 윈도우 전환기를 엽니다. 앱 전환기가 열려 있으면 선택한 앱의 윈도우를 차례로 전환합니다.",
+        switcherTakeOverSystemShortcuts: "macOS ⌘Tab 및 ⌘` 대체",
+        switcherTakeOverSystemShortcutsCaption: "Vorssaint 전환기가 활성화된 동안에만 해당 macOS 앱 및 윈도우 단축키를 끕니다. 실행 중인 모든 앱에 계속 접근할 수 있습니다.",
         switcherMergeTabs: "앱별로 하나로 묶어 표시",
         switcherMergeTabsCaption: "전환기에서 앱의 모든 윈도우를 각각이 아닌 하나의 항목으로 묶습니다.",
         switcherWindowlessApps: "열린 윈도우가 없는 앱",
