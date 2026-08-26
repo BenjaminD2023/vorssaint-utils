@@ -623,9 +623,12 @@ final class ChargeControlService: ObservableObject {
             return
         }
         let reading = sampler.sample()
+        let stateChanged = isCharging != reading.isCharging
+            || externalConnected != reading.externalConnected
         chargePercent = reading.chargePercent
         isCharging = reading.isCharging
         externalConnected = reading.externalConnected
+        if stateChanged { SystemMonitor.shared.powerStateDidChange() }
     }
 
     private func refreshFromDefaults() {
