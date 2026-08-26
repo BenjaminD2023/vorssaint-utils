@@ -587,32 +587,31 @@ struct UtilitiesSection: View {
                 }
             } else if showHomebrewPanel {
                 PanelHomebrewView {
-                    PanelInteractionState.shared.keepsPopoverOpen = false
                     showHomebrewPanel = false
                 }
             } else if showMediaPanel {
                 PanelMediaView {
-                    PanelInteractionState.shared.keepsPopoverOpen = false
+                    PanelInteractionState.shared.viewKeepsPopoverOpen = false
                     showMediaPanel = false
                 }
             } else if showClipboardPanel {
                 PanelClipboardView {
-                    PanelInteractionState.shared.keepsPopoverOpen = false
+                    PanelInteractionState.shared.viewKeepsPopoverOpen = false
                     showClipboardPanel = false
                 }
             } else if showRecentCapturesPanel {
                 PanelRecentCapturesView {
-                    PanelInteractionState.shared.keepsPopoverOpen = false
+                    PanelInteractionState.shared.viewKeepsPopoverOpen = false
                     showRecentCapturesPanel = false
                 }
             } else if showWindowLayoutPanel {
                 PanelWindowLayoutView {
-                    PanelInteractionState.shared.keepsPopoverOpen = false
+                    PanelInteractionState.shared.viewKeepsPopoverOpen = false
                     showWindowLayoutPanel = false
                 }
             } else if showAppUpdatesPanel {
                 PanelAppUpdatesView {
-                    PanelInteractionState.shared.keepsPopoverOpen = false
+                    PanelInteractionState.shared.viewKeepsPopoverOpen = false
                     showAppUpdatesPanel = false
                 }
             } else {
@@ -628,13 +627,11 @@ struct UtilitiesSection: View {
                 }
             }
         }
-        .onChange(of: isHostingUtility) { _, hosting in
-            PanelInteractionState.shared.keepsPopoverOpen = hosting
+        .onChange(of: hostedUtilityKeepsPopoverOpen) { _, keepsOpen in
+            PanelInteractionState.shared.viewKeepsPopoverOpen = keepsOpen
         }
         .onDisappear {
-            if !isHostingUtility {
-                PanelInteractionState.shared.keepsPopoverOpen = false
-            }
+            PanelInteractionState.shared.viewKeepsPopoverOpen = false
         }
     }
 
@@ -645,6 +642,12 @@ struct UtilitiesSection: View {
         showUninstaller || showCleanerPanel || showURLCleaner || showHomebrewPanel
             || showMediaPanel || showClipboardPanel || showRecentCapturesPanel
             || showWindowLayoutPanel || showAppUpdatesPanel
+    }
+
+    /// Homebrew browsing behaves like an ordinary popover. Other hosted tools
+    /// intentionally span interaction with apps and windows outside the panel.
+    private var hostedUtilityKeepsPopoverOpen: Bool {
+        isHostingUtility && !showHomebrewPanel
     }
 
     private var cleaningNeedsAccessibility: Bool {
@@ -707,7 +710,6 @@ struct UtilitiesSection: View {
                                 showsDragHandle: true,
                                 visibility: $showHomebrew,
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showHomebrewPanel = true
                                 })
         case .appUpdates:
@@ -718,7 +720,6 @@ struct UtilitiesSection: View {
                                 showsDragHandle: true,
                                 visibility: $showAppUpdates,
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showAppUpdatesPanel = true
                                 })
         case .media:
@@ -729,7 +730,6 @@ struct UtilitiesSection: View {
                                 showsDragHandle: true,
                                 visibility: $showMedia,
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showMediaPanel = true
                                 })
         case .clipboard:
@@ -743,7 +743,6 @@ struct UtilitiesSection: View {
                                 visibility: $showClipboard,
                                 shortcutHint: shortcutHint(.clipboard),
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showClipboardPanel = true
                                 })
         case .windowLayout:
@@ -754,7 +753,6 @@ struct UtilitiesSection: View {
                                 showsDragHandle: true,
                                 visibility: $showWindowLayout,
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showWindowLayoutPanel = true
                                 })
         case .uninstaller:
@@ -765,7 +763,6 @@ struct UtilitiesSection: View {
                                 showsDragHandle: true,
                                 visibility: $showUninstallerAction,
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showUninstaller = true
                                 })
         case .cleaner:
@@ -776,7 +773,6 @@ struct UtilitiesSection: View {
                                 showsDragHandle: true,
                                 visibility: $showCleanerAction,
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showCleanerPanel = true
                                 })
         case .cleanURL:
@@ -787,7 +783,6 @@ struct UtilitiesSection: View {
                                 showsDragHandle: true,
                                 visibility: $showCleanURL,
                                 action: {
-                                    PanelInteractionState.shared.keepsPopoverOpen = true
                                     showURLCleaner = true
                                 })
         case .cleaning:
@@ -811,7 +806,7 @@ struct UtilitiesSection: View {
                                 needsAttention: !permissions.screenRecording,
                                 permissionButtonTitle: l10n.s.permissionRequest,
                                 permissionAction: permissions.screenRecording ? nil : grantScreenRecordingPermission,
-                                shortcutHint: shortcutHint(.screenshot),
+                                shortcutHint: shortcutHint(.screenOCR),
                                 action: {
                                     appDelegate()?.closePopover()
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -848,7 +843,7 @@ struct UtilitiesSection: View {
                                 needsAttention: !permissions.screenRecording,
                                 permissionButtonTitle: l10n.s.permissionRequest,
                                 permissionAction: permissions.screenRecording ? nil : grantScreenRecordingPermission,
-                                shortcutHint: shortcutHint(.screenshot),
+                                shortcutHint: shortcutHint(.screenRecorder),
                                 accessoryTitle: recorder.isRecording
                                     ? nil
                                     : FeatureStrings.recentCaptures(l10n.language).title,
@@ -867,7 +862,7 @@ struct UtilitiesSection: View {
                                 isEditing: editing,
                                 showsDragHandle: true,
                                 visibility: $showColorPicker,
-                                shortcutHint: shortcutHint(.screenshot),
+                                shortcutHint: shortcutHint(.colorPicker),
                                 action: {
                                     appDelegate()?.closePopover()
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -989,7 +984,6 @@ struct UtilitiesSection: View {
     }
 
     private func showRecentCaptures() {
-        PanelInteractionState.shared.keepsPopoverOpen = true
         showRecentCapturesPanel = true
     }
 
@@ -1589,9 +1583,7 @@ struct QuickControlsSection: View {
             // Only wheels that press keys for the user (shortcut or media
             // slices) or watch a side button involve Accessibility.
             let needsAccessibility = RadialMenuSupport.needsAccessibility(
-                RadialMenuSupport.decode(UserDefaults.standard.data(forKey: DefaultsKey.radialMenuItems)))
-                || RadialMenuMouseTrigger.sanitized(
-                    UserDefaults.standard.string(forKey: DefaultsKey.radialMenuMouseButton)) != .off
+                RadialMenuSupport.decodeProfiles(UserDefaults.standard.data(forKey: DefaultsKey.radialMenuProfiles)))
             PanelToggleRow(title: radialStrings.pageTitle,
                            caption: radialMenuEnabled && needsAccessibility && !permissions.accessibility
                                ? missingPermission(l10n.s.permissionAccessibility)
