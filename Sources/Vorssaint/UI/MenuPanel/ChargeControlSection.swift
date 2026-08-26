@@ -192,7 +192,7 @@ struct ChargeLimitPowerActions: View {
         Group {
             if service.accessState == .enabled,
                service.enabled,
-               service.externalConnected,
+               (service.externalConnected || service.isDischargingToLimit),
                !service.isCalibrating,
                showDischarge || showTopUp {
                 HStack(spacing: 8) {
