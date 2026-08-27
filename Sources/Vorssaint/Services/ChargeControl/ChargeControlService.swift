@@ -27,6 +27,8 @@ final class ChargeControlService: ObservableObject {
     @Published private(set) var hasBattery = PowerSampler.hasInternalBattery
     @Published private(set) var enabled = true
     @Published private(set) var limitPercent = ChargeControlPolicy.defaultLimit
+    @Published private(set) var sailingEnabled = false
+    @Published private(set) var sailingMinimumPercent = ChargeControlPolicy.defaultSailingMinimum
     @Published private(set) var mode: ChargeControlMode = .limit
     @Published private(set) var appliedGate: ChargeControlGate = .allowCharging
     @Published private(set) var now = Date()
@@ -38,7 +40,9 @@ final class ChargeControlService: ObservableObject {
     private var panelIsVisible = false
     private var requestInFlight = false
     private var requestGeneration = 0
+    private var evaluationCoalescer = ChargeControlEvaluationCoalescer()
     private var registrationAttemptedVersion: String?
+    private var didRequestAuthorization = false
     private var sleepAssertion: IOPMAssertionID = 0
     private var lastAppliedGate: ChargeControlGate?
 
@@ -110,6 +114,9 @@ final class ChargeControlService: ObservableObject {
     func panelDidAppear() {
         panelIsVisible = true
         refresh()
+        if AppFeature.chargeControl.isAvailable, hasBattery, enabled {
+            ensureHelperForControl()
+        }
         startTimerIfNeeded()
     }
 
@@ -139,9 +146,7 @@ final class ChargeControlService: ObservableObject {
         case .enabled:
             requestStatus()
             evaluate()
-        case .unavailable:
-            error = .helperUnavailable
-        case .notRegistered:
+        case .unavailable, .notRegistered:
             isWorking = true
             do {
                 try Self.appService.register()
@@ -154,6 +159,8 @@ final class ChargeControlService: ObservableObject {
                 } else if accessState == .enabled {
                     requestStatus()
                     evaluate()
+                } else {
+                    self.error = .helperUnavailable
                 }
             } catch {
                 isWorking = false
@@ -168,10 +175,24 @@ final class ChargeControlService: ObservableObject {
         startTimerIfNeeded()
     }
 
+    /// Register the helper once when the user sets a limit. Login Items
+    /// approval is a system sheet; repeating it on every slider tick is noise.
+    private func ensureHelperForControl() {
+        refreshAccessState()
+        guard accessState != .enabled else { return }
+        guard !didRequestAuthorization else { return }
+        didRequestAuthorization = true
+        authorize()
+    }
+
     func setEnabled(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: DefaultsKey.chargeLimitEnabled)
         self.enabled = enabled
-        if !enabled { cancelTransientModes() }
+        if !enabled {
+            cancelTransientModes()
+        } else {
+            ensureHelperForControl()
+        }
         evaluate()
     }
 
@@ -179,7 +200,20 @@ final class ChargeControlService: ObservableObject {
         let cap = ChargeControlPolicy.sanitizedLimit(percent)
         UserDefaults.standard.set(cap, forKey: DefaultsKey.chargeLimitPercent)
         limitPercent = cap
+        setSailingMinimum(sailingMinimumPercent, evaluateAfterChange: false)
+        if accessState != .enabled { ensureHelperForControl() }
+        evaluate(refreshBattery: false)
+    }
+
+    func setSailingEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: DefaultsKey.chargeSailingEnabled)
+        sailingEnabled = enabled
+        ensureHelperForControl()
         evaluate()
+    }
+
+    func setSailingMinimum(_ percent: Int) {
+        setSailingMinimum(percent, evaluateAfterChange: true)
     }
 
     func startDischargeToLimit() {
@@ -274,8 +308,8 @@ final class ChargeControlService: ObservableObject {
         if resultLock.withLock({ restored }) { try? service.unregister() }
     }
 
-    private func evaluate() {
-        sampleBattery()
+    private func evaluate(refreshBattery: Bool = true) {
+        if refreshBattery { sampleBattery() }
         advanceCalibrationIfNeeded()
         settleDischargeIfNeeded()
         settleTopUpIfNeeded()
@@ -294,6 +328,7 @@ final class ChargeControlService: ObservableObject {
         let gate = ChargeControlPolicy.desiredGate(
             chargePercent: chargePercent ?? 0,
             limit: limitPercent,
+            sailingMinimum: sailingEnabled ? sailingMinimumPercent : nil,
             wasInhibited: appliedGate == .inhibitCharging,
             mode: mode,
             family: profile?.family ?? snapshot.profile?.family)
@@ -328,7 +363,8 @@ final class ChargeControlService: ObservableObject {
     }
 
     private func applyGate(_ gate: ChargeControlGate) {
-        guard accessState == .enabled, !requestInFlight else { return }
+        guard accessState == .enabled else { return }
+        guard !evaluationCoalescer.deferIfBusy(requestInFlight) else { return }
         let generation = beginRequest()
         let requestLimit = isToppingUp ? ChargeControlPolicy.maximumLimit : limitPercent
         let request = ChargeControlRequest(gate: gate, limitPercent: requestLimit)
@@ -503,11 +539,13 @@ final class ChargeControlService: ObservableObject {
     }
 
     private func apply(_ response: ChargeControlResponse) {
+        let gateChanged = response.succeeded && appliedGate != response.snapshot.gate
         snapshot = response.snapshot
         if let profile = response.snapshot.profile { self.profile = profile }
         error = response.error
         if response.succeeded { appliedGate = response.snapshot.gate }
         now = Date()
+        if gateChanged { SystemMonitor.shared.powerStateDidChange() }
     }
 
     private func beginRequest() -> Int {
@@ -519,6 +557,11 @@ final class ChargeControlService: ObservableObject {
     private func finishRequest(_ generation: Int) -> Bool {
         guard generation == requestGeneration else { return false }
         requestInFlight = false
+        if evaluationCoalescer.consumePending() {
+            DispatchQueue.main.async { [weak self] in
+                self?.evaluate(refreshBattery: false)
+            }
+        }
         return true
     }
 
@@ -587,16 +630,33 @@ final class ChargeControlService: ObservableObject {
             return
         }
         let reading = sampler.sample()
+        let stateChanged = isCharging != reading.isCharging
+            || externalConnected != reading.externalConnected
         chargePercent = reading.chargePercent
         isCharging = reading.isCharging
         externalConnected = reading.externalConnected
+        if stateChanged { SystemMonitor.shared.powerStateDidChange() }
     }
 
     private func refreshFromDefaults() {
         let defaults = UserDefaults.standard
         enabled = defaults.object(forKey: DefaultsKey.chargeLimitEnabled) as? Bool ?? true
         limitPercent = ChargeControlPolicy.sanitizedLimit(defaults.integer(forKey: DefaultsKey.chargeLimitPercent))
+        sailingEnabled = defaults.bool(forKey: DefaultsKey.chargeSailingEnabled)
+        sailingMinimumPercent = ChargeControlPolicy.sanitizedSailingMinimum(
+            defaults.integer(forKey: DefaultsKey.chargeSailingMinimumPercent),
+            limit: limitPercent)
         hasBattery = PowerSampler.hasInternalBattery
+    }
+
+    private func setSailingMinimum(_ percent: Int, evaluateAfterChange: Bool) {
+        let minimum = ChargeControlPolicy.sanitizedSailingMinimum(percent, limit: limitPercent)
+        UserDefaults.standard.set(minimum, forKey: DefaultsKey.chargeSailingMinimumPercent)
+        sailingMinimumPercent = minimum
+        if evaluateAfterChange {
+            if accessState != .enabled { ensureHelperForControl() }
+            evaluate(refreshBattery: false)
+        }
     }
 
     private func cancelTransientModes() {
@@ -615,6 +675,10 @@ final class ChargeControlService: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: ChargeControlPolicy.pollInterval, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.now = Date()
+            if self.accessState != .enabled {
+                self.refreshAccessState()
+                if self.accessState == .enabled { self.requestStatus() }
+            }
             if self.appliedGate == .forceDischarge { self.heartbeat() }
             self.evaluate()
         }

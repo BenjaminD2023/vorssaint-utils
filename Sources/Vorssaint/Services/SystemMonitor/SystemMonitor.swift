@@ -225,14 +225,25 @@ final class SystemMonitor: ObservableObject {
         powerSourceRunLoopSource = IOPSNotificationCreateRunLoopSource({ context in
             guard let context else { return }
             let monitor = Unmanaged<SystemMonitor>.fromOpaque(context).takeUnretainedValue()
-            DispatchQueue.main.async {
-                guard monitor.shouldRun,
-                      monitor.currentPlan(defaults: .standard).needPower else { return }
-                monitor.refresh()
-            }
+            monitor.powerStateDidChange()
         }, context)?.takeRetainedValue()
         if let powerSourceRunLoopSource {
             CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .defaultMode)
+        }
+    }
+
+    /// Refreshes charging state immediately after either macOS or the protected
+    /// charge controller changes it, rather than waiting for the background poll.
+    func powerStateDidChange() {
+        runOnMain { [weak self] in
+            guard let self, shouldRun,
+                  currentPlan(defaults: .standard).needPower else { return }
+            let foreground = fullMonitorVisible || menuPanelNeeds.any
+            let powerStride = MonitorSamplingPolicy.sampleStride(for: .power,
+                                                                 intervalSeconds: intervalSeconds,
+                                                                 foreground: foreground)
+            tickCount = MonitorSamplingPolicy.alignedTick(tickCount, wakeTicks: powerStride)
+            refresh()
         }
     }
 

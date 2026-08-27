@@ -9,11 +9,12 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Charge Limit can stop charging at a chosen level (20–100%), discharge down to
   that level, and run a full battery calibration cycle. Off by default in
-  Features, with a dial in the menu bar panel, a slider on the Battery metric
-  page, and under Energy. While plugged in, Discharge drains to the limit and
-  Top up temporarily charges to 100%.
-- The menu bar battery reading shows a yellow dot while Low Power Mode is on.
-  Numeric battery values also show a green dot while charging.
+  Features, with a segmented battery bar and slider in the menu bar panel, on
+  the Battery metric page, and under Energy. Optional Sailing mode waits for a
+  lower level before charging resumes. While plugged in, Discharge drains to
+  the limit and Top up temporarily charges to 100%.
+- The menu bar battery icon turns yellow while Low Power Mode is on and shows
+  live charge fill with native charging and plugged-in indicators.
 
 ### Changed
 - Menu bar CPU, GPU, memory, disk usage, battery and accessory batteries can
@@ -26,6 +27,8 @@ All notable changes to this project are documented here. The format follows
 - Charge Limit no longer calls an M-series Mac unsupported from a userspace
   SMC probe; the privileged helper decides, and CHTE/CH0C size differences
   are accepted.
+- Charge Limit applies the latest slider value immediately after an active
+  helper write instead of waiting for the next two-second poll.
 
 ## [3.3.3-beta.3] - 2026-08-26
 

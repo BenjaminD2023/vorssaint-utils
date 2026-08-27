@@ -73,30 +73,7 @@ struct ChargeLimitInlineAdjuster: View {
 
     @ViewBuilder
     private var footer: some View {
-        if service.accessState == .notRegistered {
-            Button(strings.allowControl) {
-                ensureFeatureAvailable()
-                service.authorize()
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(ChargeLimitPalette.lime(for: colorScheme))
-            .controlSize(.small)
-            .frame(maxWidth: .infinity)
-            Text(strings.approvalCaption)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if service.accessState == .requiresApproval {
-            Button(strings.openSettings, action: service.authorize)
-                .buttonStyle(.borderedProminent)
-                .tint(ChargeLimitPalette.lime(for: colorScheme))
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
-            Text(strings.approvalCaption)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if service.accessState == .enabled {
+        if service.accessState == .enabled {
             HStack(spacing: 8) {
                 Toggle(strings.enableToggle, isOn: Binding(
                     get: { service.enabled },
@@ -114,12 +91,36 @@ struct ChargeLimitInlineAdjuster: View {
                     .foregroundStyle(statusColor)
                     .lineLimit(1)
             }
-            ChargeLimitPowerActions()
-        } else if let message = errorMessage {
-            Text(message)
+        } else if service.accessState == .requiresApproval {
+            Button(strings.openSettings, action: service.authorize)
+                .buttonStyle(.borderedProminent)
+                .tint(ChargeLimitPalette.lime(for: colorScheme))
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+            Text(strings.approvalCaption)
                 .font(.system(size: 10))
-                .foregroundStyle(.red)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Button(strings.allowControl) {
+                ensureFeatureAvailable()
+                service.authorize()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(ChargeLimitPalette.lime(for: colorScheme))
+            .controlSize(.small)
+            .frame(maxWidth: .infinity)
+            if let message = errorMessage {
+                Text(message)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(strings.approvalCaption)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -178,7 +179,7 @@ struct ChargeLimitInlineAdjuster: View {
 
 /// Discharge and Top up while the adapter is connected. Discharge drains to
 /// the saved limit; Top up temporarily charges to 100% and then restores it.
-private struct ChargeLimitPowerActions: View {
+struct ChargeLimitPowerActions: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var service = ChargeControlService.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -188,40 +189,50 @@ private struct ChargeLimitPowerActions: View {
     }
 
     var body: some View {
-        if service.accessState == .enabled,
-           service.enabled,
-           service.externalConnected,
-           !service.isCalibrating,
-           showDischarge || showTopUp {
-            HStack(spacing: 8) {
-                if showDischarge {
-                    Button(service.isDischargingToLimit ? strings.stopDischarge : strings.discharge) {
-                        if service.isDischargingToLimit { service.stopDischarge() }
-                        else { service.startDischargeToLimit() }
+        Group {
+            if service.accessState == .enabled,
+               service.enabled,
+               (service.externalConnected || service.isDischargingToLimit),
+               !service.isCalibrating,
+               showDischarge || showTopUp {
+                HStack(spacing: 8) {
+                    if showDischarge {
+                        Button {
+                            if service.isDischargingToLimit { service.stopDischarge() }
+                            else { service.startDischargeToLimit() }
+                        } label: {
+                            Label(service.isDischargingToLimit ? strings.stopDischarge : strings.discharge,
+                                  systemImage: service.isDischargingToLimit
+                                      ? "stop.circle.fill" : "arrow.down.circle")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(service.isDischargingToLimit
+                              ? ChargeLimitPalette.discharge(for: colorScheme)
+                              : nil)
+                        .controlSize(.small)
+                        .disabled(service.isWorking)
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(service.isDischargingToLimit
-                          ? ChargeLimitPalette.discharge(for: colorScheme)
-                          : nil)
-                    .controlSize(.small)
-                    .disabled(service.isWorking)
-                    .frame(maxWidth: .infinity)
-                }
-                if showTopUp {
-                    Button(service.isToppingUp ? strings.stopTopUp : strings.topUp) {
-                        if service.isToppingUp { service.stopTopUp() }
-                        else { service.startTopUp() }
+                    if showTopUp {
+                        Button {
+                            if service.isToppingUp { service.stopTopUp() }
+                            else { service.startTopUp() }
+                        } label: {
+                            Label(service.isToppingUp ? strings.stopTopUp : strings.topUp,
+                                  systemImage: service.isToppingUp ? "stop.circle.fill" : "bolt.fill")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(service.isToppingUp
+                              ? ChargeLimitPalette.charging(for: colorScheme)
+                              : nil)
+                        .controlSize(.small)
+                        .disabled(service.isWorking)
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(service.isToppingUp
-                          ? ChargeLimitPalette.charging(for: colorScheme)
-                          : nil)
-                    .controlSize(.small)
-                    .disabled(service.isWorking)
-                    .frame(maxWidth: .infinity)
                 }
             }
         }
+        .onAppear { service.panelDidAppear() }
     }
 
     private var showDischarge: Bool {
@@ -250,8 +261,11 @@ struct ChargeControlCardContent: View {
         VStack(alignment: .leading, spacing: compact ? 12 : 16) {
             header
             if service.hasBattery {
-                dial
+                batteryLevel
                 limitSlider
+                if service.enabled {
+                    sailingControls
+                }
                 if let message = stateMessage {
                     Text(message)
                         .font(.system(size: 10))
@@ -280,35 +294,29 @@ struct ChargeControlCardContent: View {
         HStack(spacing: 8) {
             Image(systemName: headerSymbol)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(ChargeLimitPalette.lime(for: colorScheme))
+                .foregroundStyle(statusColor)
                 .symbolEffect(.variableColor.iterative, options: .repeating, isActive: service.isCharging)
                 .frame(width: 24)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(strings.title)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(statusText)
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
-                    .foregroundStyle(statusColor)
-            }
+            Text(statusText)
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundStyle(statusColor)
             Spacer()
             if service.isWorking { ProgressView().controlSize(.small) }
         }
     }
 
-    private var dial: some View {
-        HStack {
-            Spacer()
-            ChargeLimitDial(
-                charge: Double(service.chargePercent ?? 0) / 100,
-                limit: Double(service.limitPercent) / 100,
-                statusColor: statusColor,
-                chargeLabel: "\(service.chargePercent ?? 0)",
-                statusLabel: statusText
-            )
-            .frame(width: compact ? 148 : 176, height: compact ? 148 : 176)
-            Spacer()
-        }
-        .padding(.vertical, compact ? 2 : 6)
+    private var batteryLevel: some View {
+        ChargeLimitBars(
+            charge: service.chargePercent ?? 0,
+            limit: service.limitPercent,
+            excessColor: service.isToppingUp
+                ? ChargeLimitPalette.charging(for: colorScheme)
+                : ChargeLimitPalette.discharge(for: colorScheme),
+            statusLabel: statusText,
+            limitLabel: strings.limitLabel,
+            height: compact ? 25 : 30
+        )
+        .padding(.vertical, compact ? 0 : 4)
     }
 
     private var limitSlider: some View {
@@ -337,21 +345,51 @@ struct ChargeControlCardContent: View {
         }
     }
 
+    private var sailingControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(strings.sailingMode, isOn: Binding(
+                get: { service.sailingEnabled },
+                set: { service.setSailingEnabled($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .disabled(service.isCalibrating)
+
+            if service.sailingEnabled {
+                HStack {
+                    Text(strings.sailingMinimumLabel)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(service.sailingMinimumPercent)%")
+                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(ChargeLimitPalette.lime(for: colorScheme))
+                }
+                ChargeLimitSlider(
+                    value: Binding(
+                        get: { Double(service.sailingMinimumPercent) },
+                        set: { service.setSailingMinimum(Int($0.rounded())) }
+                    ),
+                    range: Double(ChargeControlPolicy.minimumSailingLimit)...Double(
+                        max(ChargeControlPolicy.minimumSailingLimit, service.limitPercent - 1))
+                )
+                .disabled(service.isCalibrating)
+                .opacity(service.isCalibrating ? 0.45 : 1)
+                .accessibilityLabel(strings.sailingMinimumLabel)
+
+                if !compact {
+                    Text(strings.sailingCaption)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var actions: some View {
-        if service.accessState == .notRegistered {
-            Button(strings.allowControl, action: service.authorize)
-                .buttonStyle(.borderedProminent)
-                .tint(ChargeLimitPalette.lime(for: colorScheme))
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
-        } else if service.accessState == .requiresApproval {
-            Button(strings.openSettings, action: service.authorize)
-                .buttonStyle(.borderedProminent)
-                .tint(ChargeLimitPalette.lime(for: colorScheme))
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
-        } else if service.accessState == .enabled {
+        if service.accessState == .enabled {
             Toggle(strings.enableToggle, isOn: Binding(
                 get: { service.enabled },
                 set: { service.setEnabled($0) }
@@ -362,6 +400,18 @@ struct ChargeControlCardContent: View {
             if service.enabled {
                 ChargeLimitPowerActions()
             }
+        } else if service.accessState == .requiresApproval {
+            Button(strings.openSettings, action: service.authorize)
+                .buttonStyle(.borderedProminent)
+                .tint(ChargeLimitPalette.lime(for: colorScheme))
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+        } else {
+            Button(strings.allowControl, action: service.authorize)
+                .buttonStyle(.borderedProminent)
+                .tint(ChargeLimitPalette.lime(for: colorScheme))
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -497,77 +547,68 @@ private enum ChargeLimitPalette {
     }
 }
 
-struct ChargeLimitDial: View {
-    let charge: Double
-    let limit: Double
-    let statusColor: Color
-    let chargeLabel: String
+struct ChargeLimitBars: View {
+    let charge: Int
+    let limit: Int
+    let excessColor: Color
     let statusLabel: String
+    let limitLabel: String
+    let height: CGFloat
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var filledSegments: Int {
+        ChargeLimitBarSupport.filledSegmentCount(for: charge)
+    }
 
     var body: some View {
-        ZStack {
-            Circle().fill(colorScheme == .light ? Color.black.opacity(0.03) : Color.white.opacity(0.035))
-            ChargeLimitRing(progress: 1, lineWidth: 11)
-                .foregroundStyle(ChargeLimitPalette.track(for: colorScheme))
-            ChargeLimitRing(progress: min(max(charge, 0), 1), lineWidth: 11)
-                .foregroundStyle(statusColor)
-                .shadow(color: statusColor.opacity(0.35), radius: 6)
-            ChargeLimitTick(progress: min(max(limit, 0), 1), lineWidth: 11)
-                .stroke(Color.primary.opacity(0.92), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-            VStack(spacing: 2) {
-                Text(chargeLabel)
-                    .font(.system(size: 42, weight: .bold, design: .rounded).monospacedDigit())
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text("\(ChargeLimitBarSupport.clampedPercent(charge))")
+                    .font(.system(size: 38, weight: .semibold, design: .rounded).monospacedDigit())
                 Text("%")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
-                    .offset(y: -4)
-                Text(statusLabel)
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(statusColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 12)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(limitLabel)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+                    Text("\(ChargeLimitBarSupport.clampedPercent(limit))%")
+                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(ChargeLimitPalette.lime(for: colorScheme))
+                }
             }
-            .offset(y: 4)
+
+            GeometryReader { proxy in
+                let markerX = proxy.size.width * ChargeLimitBarSupport.targetFraction(for: limit)
+                ZStack(alignment: .leading) {
+                    HStack(spacing: 3) {
+                        ForEach(0..<ChargeLimitBarSupport.segmentCount, id: \.self) { index in
+                            RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                                .fill(segmentColor(index))
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.72))
+                        .frame(width: 1, height: height + 6)
+                        .offset(x: min(max(0, markerX), max(0, proxy.size.width - 1)))
+                }
+                .frame(height: height)
+            }
+            .frame(height: height)
         }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: filledSegments)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(statusLabel)
-        .accessibilityValue("\(chargeLabel)%")
+        .accessibilityValue("\(ChargeLimitBarSupport.clampedPercent(charge))%, \(limitLabel) \(ChargeLimitBarSupport.clampedPercent(limit))%")
     }
-}
 
-private struct ChargeLimitRing: Shape {
-    var progress: Double
-    var lineWidth: CGFloat
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
-    func path(in rect: CGRect) -> Path {
-        let inset = lineWidth / 2
-        let radius = min(rect.width, rect.height) / 2 - inset
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        var path = Path()
-        path.addArc(center: center, radius: radius, startAngle: .degrees(-90),
-                    endAngle: .degrees(-90 + 360 * min(max(progress, 0), 1)), clockwise: false)
-        return path.strokedPath(StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-    }
-}
-
-private struct ChargeLimitTick: Shape {
-    var progress: Double
-    var lineWidth: CGFloat
-    func path(in rect: CGRect) -> Path {
-        let inset = lineWidth / 2
-        let radius = min(rect.width, rect.height) / 2 - inset
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let angle = Angle.degrees(-90 + 360 * min(max(progress, 0), 1)).radians
-        var path = Path()
-        path.move(to: CGPoint(x: center.x + CGFloat(cos(angle)) * (radius - 7),
-                              y: center.y + CGFloat(sin(angle)) * (radius - 7)))
-        path.addLine(to: CGPoint(x: center.x + CGFloat(cos(angle)) * (radius + 7),
-                                 y: center.y + CGFloat(sin(angle)) * (radius + 7)))
-        return path
+    private func segmentColor(_ index: Int) -> Color {
+        guard index < filledSegments else { return ChargeLimitPalette.track(for: colorScheme) }
+        if ChargeLimitBarSupport.isAboveLimit(segment: index, limit: limit) { return excessColor }
+        return ChargeLimitPalette.lime(for: colorScheme)
     }
 }
 

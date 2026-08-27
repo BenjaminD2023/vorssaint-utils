@@ -84,10 +84,48 @@ struct ChargeControlResponse: Codable, Equatable, Sendable {
     }
 }
 
+enum ChargeLimitBarSupport {
+    static let segmentCount = 20
+
+    static func clampedPercent(_ percent: Int) -> Int {
+        min(100, max(0, percent))
+    }
+
+    static func filledSegmentCount(for percent: Int) -> Int {
+        let percent = clampedPercent(percent)
+        return percent == 0 ? 0 : (percent + 4) / 5
+    }
+
+    static func targetFraction(for percent: Int) -> Double {
+        Double(clampedPercent(percent)) / 100
+    }
+
+    static func isAboveLimit(segment index: Int, limit: Int) -> Bool {
+        (index + 1) * 5 > clampedPercent(limit)
+    }
+}
+
+struct ChargeControlEvaluationCoalescer {
+    private var pending = false
+
+    mutating func deferIfBusy(_ isBusy: Bool) -> Bool {
+        guard isBusy else { return false }
+        pending = true
+        return true
+    }
+
+    mutating func consumePending() -> Bool {
+        defer { pending = false }
+        return pending
+    }
+}
+
 enum ChargeControlPolicy {
     static let minimumLimit = 20
     static let maximumLimit = 100
     static let defaultLimit = 80
+    static let minimumSailingLimit = 10
+    static let defaultSailingMinimum = 70
     static let hysteresis = 2
     static let calibrationFloor = 10
     static let calibrationFull = 100
@@ -100,8 +138,14 @@ enum ChargeControlPolicy {
         (minimumLimit...maximumLimit).contains(percent) ? percent : defaultLimit
     }
 
+    static func sanitizedSailingMinimum(_ percent: Int, limit: Int) -> Int {
+        let cap = sanitizedLimit(limit)
+        return min(max(percent, minimumSailingLimit), cap - 1)
+    }
+
     static func desiredGate(chargePercent: Int,
                             limit: Int,
+                            sailingMinimum: Int? = nil,
                             wasInhibited: Bool,
                             mode: ChargeControlMode,
                             family: ChargeControlFamily?) -> ChargeControlGate {
@@ -119,12 +163,14 @@ enum ChargeControlPolicy {
 
         guard cap < maximumLimit else { return .allowCharging }
 
-        if family == .intelBCLM {
+        if family == .intelBCLM, sailingMinimum == nil {
             return .inhibitCharging
         }
 
         if chargePercent >= cap { return .inhibitCharging }
-        if wasInhibited && chargePercent > cap - hysteresis { return .inhibitCharging }
+        let resumeAt = sailingMinimum.map { sanitizedSailingMinimum($0, limit: cap) }
+            ?? cap - hysteresis
+        if wasInhibited && chargePercent > resumeAt { return .inhibitCharging }
         return .allowCharging
     }
 

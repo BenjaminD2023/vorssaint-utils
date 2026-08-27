@@ -63,9 +63,20 @@ enum MenuBarMetricAppearance: String, CaseIterable {
     }
 }
 
-/// Native menu-bar battery glyphs: fill by percent, a bolt while charging,
-/// and the power cable when plugged in but not adding charge.
+/// Native menu-bar battery: the system outline with a live fill and charging
+/// cutout, yellow while Low Power Mode is on.
 enum MenuBarBatterySupport {
+    /// Optical size of the macOS menu bar / Control Center battery.
+    static let symbolPointSize: CGFloat = 18
+
+    static let valueColor = NSColor.textColor
+    static let outlineColor = NSColor.textColor
+    static let lowPowerColor = NSColor(srgbRed: 1, green: 0.8, blue: 0.19, alpha: 0.88)
+
+    static let glyphSize: CGSize =
+        makeBatterySymbol(named: "battery.100percent", color: .labelColor)?.size
+        ?? CGSize(width: 31, height: 14)
+
     static func symbolName(for percent: Int,
                            isCharging: Bool,
                            isPluggedIn: Bool = false) -> String {
@@ -79,26 +90,116 @@ enum MenuBarBatterySupport {
         default: return "battery.0percent"
         }
     }
-}
 
-/// Green while charging (numeric battery values only — native bars already
-/// show a lightning bolt) and yellow while Low Power Mode is on.
-enum MenuBarBatteryDot: Equatable {
-    case charging, lowPower
+    static func symbolColor(lowPowerMode: Bool) -> NSColor {
+        lowPowerMode ? lowPowerColor : valueColor
+    }
 
-    var color: NSColor {
-        switch self {
-        case .charging: return .systemGreen
-        case .lowPower: return .systemYellow
+    static func fillFraction(_ percent: Int) -> CGFloat {
+        CGFloat(max(0, min(100, percent))) / 100
+    }
+
+    static func fillRect(in rect: NSRect, percent: Int) -> NSRect {
+        let xScale = rect.width / glyphSize.width
+        let yScale = rect.height / glyphSize.height
+        return NSRect(x: rect.minX + 4 * xScale,
+                      y: rect.minY + 3 * yScale,
+                      width: 19 * xScale * fillFraction(percent),
+                      height: 8 * yScale)
+    }
+
+    static func glyphImage(percent: Int,
+                           isCharging: Bool,
+                           isPluggedIn: Bool,
+                           lowPowerMode: Bool,
+                           tint: NSColor? = nil) -> NSImage {
+        let outlineColor = tint ?? MenuBarBatterySupport.outlineColor
+        let fillColor = lowPowerMode ? lowPowerColor : (tint ?? valueColor)
+        let size = glyphSize
+        let image = NSImage(size: size, flipped: false) { rect in
+            drawGlyph(in: rect,
+                      percent: percent,
+                      isCharging: isCharging,
+                      isPluggedIn: isPluggedIn,
+                      outlineColor: outlineColor,
+                      fillColor: fillColor)
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    static func drawGlyph(in rect: NSRect,
+                          percent: Int,
+                          isCharging: Bool,
+                          isPluggedIn: Bool,
+                          outlineColor: NSColor,
+                          fillColor: NSColor) {
+        guard let empty = makeBatterySymbol(named: "battery.0percent",
+                                            color: outlineColor.withAlphaComponent(0.75)) else { return }
+
+        let fillRect = fillRect(in: rect, percent: percent)
+        if fillRect.width > 0 {
+            fillColor.setFill()
+            let radius = min(fillRect.width, fillRect.height) / 2
+            NSBezierPath(roundedRect: fillRect, xRadius: radius, yRadius: radius).fill()
+        }
+        empty.draw(in: rect)
+
+        if isCharging,
+           let bolt = makeMonochromeSymbol(named: "bolt.fill", pointSize: 11, color: .white) {
+            if fillFraction(percent) < 0.35 {
+                drawCentered(bolt, in: rect.offsetBy(dx: -2, dy: 0))
+            } else {
+                drawCentered(bolt, in: rect.offsetBy(dx: -2, dy: 0), operation: .destinationOut)
+            }
+        } else if isPluggedIn {
+            drawPlug(in: rect, color: fillColor)
         }
     }
 
-    static func current(isCharging: Bool,
-                        lowPowerMode: Bool,
-                        nativeChargingIcon: Bool = false) -> MenuBarBatteryDot? {
-        if isCharging && !nativeChargingIcon { return .charging }
-        if lowPowerMode { return .lowPower }
-        return nil
+    private static func makeBatterySymbol(named name: String, color: NSColor) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: color))
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else { return nil }
+        image.isTemplate = false
+        return image
+    }
+
+    private static func makeMonochromeSymbol(named name: String,
+                                             pointSize: CGFloat,
+                                             color: NSColor) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: color))
+        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+    }
+
+    private static func drawPlug(in rect: NSRect, color: NSColor) {
+        guard let cutout = makeMonochromeSymbol(named: "powerplug.portrait.fill",
+                                                pointSize: 16.5,
+                                                color: .white),
+              let plug = makeMonochromeSymbol(named: "powerplug.portrait.fill",
+                                              pointSize: 11.5,
+                                              color: color) else { return }
+        let centered = rect.offsetBy(dx: -2, dy: 0)
+        drawCentered(cutout, in: centered, operation: .destinationOut)
+        drawCentered(plug, in: centered)
+    }
+
+    private static func drawCentered(_ image: NSImage,
+                                     in rect: NSRect,
+                                     operation: NSCompositingOperation = .sourceOver) {
+        image.draw(in: NSRect(x: rect.midX - image.size.width / 2,
+                              y: rect.midY - image.size.height / 2,
+                              width: image.size.width,
+                              height: image.size.height),
+                   from: .zero,
+                   operation: operation,
+                   fraction: 1,
+                   respectFlipped: true,
+                   hints: nil)
     }
 }
 
@@ -383,4 +484,3 @@ enum StatusItemPlacementSupport {
         }
     }
 }
-
