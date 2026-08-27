@@ -757,11 +757,15 @@ final class ClipboardHistoryService: ObservableObject {
         save()
     }
 
-    private func trimToLimit() {
+    func trimToLimit() {
         let limit = Defaults.sanitizedClipboardHistoryLimit(
             UserDefaults.standard.integer(forKey: DefaultsKey.clipboardHistoryLimit)
         )
-        entries = ClipboardHistoryEditing.retainedEntries(entries, recentLimit: limit)
+        let trimmed = ClipboardHistoryEditing.retainedEntries(entries, recentLimit: limit)
+        if trimmed != entries {
+            entries = trimmed
+            save()
+        }
     }
 
     private var firstRecentIndex: Int {
@@ -1127,14 +1131,9 @@ final class ClipboardHistoryService: ObservableObject {
             }
             let modifiers = event.modifierFlags.intersection([.command, .option, .shift, .control])
             if event.keyCode == UInt16(kVK_Escape) {
-                // Esc backs out one layer at a time: preview, selection,
-                // then the window.
-                if self.quickPreviewPresented {
-                    self.setQuickPreviewPresented(false)
-                } else if self.quickBatchCount > 0 {
-                    self.clearQuickBatchSelection()
-                } else {
-                    self.hideHistoryWindow()
+                switch ClipboardHistoryEscape.action(batchCount: self.quickBatchCount) {
+                case .clearBatchSelection: self.clearQuickBatchSelection()
+                case .hideWindow: self.hideHistoryWindow()
                 }
                 return nil
             }
