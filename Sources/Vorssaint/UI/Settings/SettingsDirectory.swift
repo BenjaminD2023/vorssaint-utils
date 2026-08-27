@@ -49,6 +49,8 @@ enum SettingsDirectory {
                                                  FeatureStrings.keepAwakeAutomation(language).powerToggle,
                                                  FeatureStrings.keepAwakeDisplaySleep(language)
                                                      .allowDisplaySleep,
+                                                 FeatureStrings.bluetoothSleep(language).pageTitle,
+                                                 FeatureStrings.bluetoothSleep(language).enable,
                                                  FeatureStrings.chargeControl(language).title,
                                                  FeatureStrings.chargeControl(language).calibrationTitle]),
                 SettingsDirectoryItem(page: .monitor, title: s.tabMonitor, icon: "chart.line.uptrend.xyaxis",

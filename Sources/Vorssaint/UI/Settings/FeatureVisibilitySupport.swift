@@ -21,6 +21,7 @@ enum SettingsSectionAnchor: String, CaseIterable, Hashable {
     case keepAwake
     case brightness
     case extraBrightness
+    case bluetoothSleep
     case chargeControl
     case scrollDirection
     case focusFollowsMouse
@@ -50,7 +51,7 @@ enum SettingsSectionAnchor: String, CaseIterable, Hashable {
     var page: SettingsPage {
         switch self {
         case .panelConfiguration, .musicBlocking: return .general
-        case .keepAwake, .brightness, .extraBrightness, .chargeControl: return .energy
+        case .keepAwake, .brightness, .extraBrightness, .bluetoothSleep, .chargeControl: return .energy
         case .scrollDirection, .focusFollowsMouse, .smoothScroll, .mouseNavigation, .mouseButtonShortcuts,
              .middleClick:
             return .mouse
@@ -183,6 +184,8 @@ extension AppFeature {
             return FeatureSettingsDestination(.energy, sectionAnchor: .brightness)
         case .extraBrightness:
             return FeatureSettingsDestination(.energy, sectionAnchor: .extraBrightness)
+        case .bluetoothSleep:
+            return FeatureSettingsDestination(.energy, sectionAnchor: .bluetoothSleep)
         case .chargeControl:
             return FeatureSettingsDestination(.energy, sectionAnchor: .chargeControl)
 
@@ -233,7 +236,7 @@ enum FeatureVisibilitySupport {
     /// always shows (General, Shortcuts, About and friends).
     static func features(for page: SettingsPage) -> [AppFeature] {
         switch page {
-        case .energy: return [.keepAwake, .brightness, .extraBrightness, .chargeControl]
+        case .energy: return [.keepAwake, .brightness, .extraBrightness, .bluetoothSleep, .chargeControl]
         case .monitor: return monitorFeatures
         case .mouse: return [.scrollInverter, .focusFollowsMouse, .smoothScroll, .mouseNavigation, .mouseButtonShortcuts,
                              .middleClick]
