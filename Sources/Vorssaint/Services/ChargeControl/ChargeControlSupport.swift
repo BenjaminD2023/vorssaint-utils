@@ -105,6 +105,21 @@ enum ChargeLimitBarSupport {
     }
 }
 
+struct ChargeControlEvaluationCoalescer {
+    private var pending = false
+
+    mutating func deferIfBusy(_ isBusy: Bool) -> Bool {
+        guard isBusy else { return false }
+        pending = true
+        return true
+    }
+
+    mutating func consumePending() -> Bool {
+        defer { pending = false }
+        return pending
+    }
+}
+
 enum ChargeControlPolicy {
     static let minimumLimit = 20
     static let maximumLimit = 100

@@ -40,6 +40,7 @@ final class ChargeControlService: ObservableObject {
     private var panelIsVisible = false
     private var requestInFlight = false
     private var requestGeneration = 0
+    private var evaluationCoalescer = ChargeControlEvaluationCoalescer()
     private var registrationAttemptedVersion: String?
     private var didRequestAuthorization = false
     private var sleepAssertion: IOPMAssertionID = 0
@@ -200,8 +201,8 @@ final class ChargeControlService: ObservableObject {
         UserDefaults.standard.set(cap, forKey: DefaultsKey.chargeLimitPercent)
         limitPercent = cap
         setSailingMinimum(sailingMinimumPercent, evaluateAfterChange: false)
-        ensureHelperForControl()
-        evaluate()
+        if accessState != .enabled { ensureHelperForControl() }
+        evaluate(refreshBattery: false)
     }
 
     func setSailingEnabled(_ enabled: Bool) {
@@ -307,8 +308,8 @@ final class ChargeControlService: ObservableObject {
         if resultLock.withLock({ restored }) { try? service.unregister() }
     }
 
-    private func evaluate() {
-        sampleBattery()
+    private func evaluate(refreshBattery: Bool = true) {
+        if refreshBattery { sampleBattery() }
         advanceCalibrationIfNeeded()
         settleDischargeIfNeeded()
         settleTopUpIfNeeded()
@@ -362,7 +363,8 @@ final class ChargeControlService: ObservableObject {
     }
 
     private func applyGate(_ gate: ChargeControlGate) {
-        guard accessState == .enabled, !requestInFlight else { return }
+        guard accessState == .enabled else { return }
+        guard !evaluationCoalescer.deferIfBusy(requestInFlight) else { return }
         let generation = beginRequest()
         let requestLimit = isToppingUp ? ChargeControlPolicy.maximumLimit : limitPercent
         let request = ChargeControlRequest(gate: gate, limitPercent: requestLimit)
@@ -543,7 +545,12 @@ final class ChargeControlService: ObservableObject {
         error = response.error
         if response.succeeded { appliedGate = response.snapshot.gate }
         now = Date()
-        if gateChanged { SystemMonitor.shared.powerStateDidChange() }
+        if gateChanged {
+            SystemMonitor.shared.powerStateDidChange()
+            DispatchQueue.main.asyncAfter(deadline: .now() + ChargeControlPolicy.pollInterval / 4) { [weak self] in
+                self?.sampleBattery()
+            }
+        }
     }
 
     private func beginRequest() -> Int {
@@ -555,6 +562,11 @@ final class ChargeControlService: ObservableObject {
     private func finishRequest(_ generation: Int) -> Bool {
         guard generation == requestGeneration else { return false }
         requestInFlight = false
+        if evaluationCoalescer.consumePending() {
+            DispatchQueue.main.async { [weak self] in
+                self?.evaluate(refreshBattery: false)
+            }
+        }
         return true
     }
 
@@ -647,8 +659,8 @@ final class ChargeControlService: ObservableObject {
         UserDefaults.standard.set(minimum, forKey: DefaultsKey.chargeSailingMinimumPercent)
         sailingMinimumPercent = minimum
         if evaluateAfterChange {
-            ensureHelperForControl()
-            evaluate()
+            if accessState != .enabled { ensureHelperForControl() }
+            evaluate(refreshBattery: false)
         }
     }
 

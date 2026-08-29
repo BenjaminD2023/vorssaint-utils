@@ -675,6 +675,11 @@ struct MetricsTests {
                "battery time formats hours and minutes")
         expect(BatteryTimeSupport.formatted(seconds: 30) == "0h 1m",
                "battery time keeps a positive final minute visible")
+        expect(MetricFormat.batteryIsCharging(reported: false, amperageMilliamps: 1)
+                && !MetricFormat.batteryIsCharging(reported: true, amperageMilliamps: 0)
+                && MetricFormat.batteryIsCharging(reported: true, amperageMilliamps: nil)
+                && !MetricFormat.batteryIsCharging(reported: false, amperageMilliamps: -1),
+               "battery current overrides a lagging charging flag and falls back when unavailable")
 
         expect(MetricFormat.systemPowerWatts(measured: 3,
                                              batteryWatts: 10,
@@ -11138,6 +11143,14 @@ struct MetricsTests {
                 && !ChargeLimitBarSupport.isAboveLimit(segment: 15, limit: 80)
                 && ChargeLimitBarSupport.isAboveLimit(segment: 16, limit: 80),
                "charge bars map level and limit onto twenty 5% segments")
+        var evaluationCoalescer = ChargeControlEvaluationCoalescer()
+        let deferredWhileBusy = evaluationCoalescer.deferIfBusy(true)
+            && evaluationCoalescer.deferIfBusy(true)
+        expect(!evaluationCoalescer.deferIfBusy(false)
+                && deferredWhileBusy
+                && evaluationCoalescer.consumePending()
+                && !evaluationCoalescer.consumePending(),
+               "charge-control request bursts produce one trailing evaluation")
         expect(ChargeControlPolicy.desiredGate(chargePercent: 81, limit: 80,
                                                wasInhibited: false, mode: .limit,
                                                family: .appleSiliconCHT) == .inhibitCharging,
