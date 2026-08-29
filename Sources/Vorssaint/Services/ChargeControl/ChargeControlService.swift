@@ -545,7 +545,12 @@ final class ChargeControlService: ObservableObject {
         error = response.error
         if response.succeeded { appliedGate = response.snapshot.gate }
         now = Date()
-        if gateChanged { SystemMonitor.shared.powerStateDidChange() }
+        if gateChanged {
+            SystemMonitor.shared.powerStateDidChange()
+            DispatchQueue.main.asyncAfter(deadline: .now() + ChargeControlPolicy.pollInterval / 4) { [weak self] in
+                self?.sampleBattery()
+            }
+        }
     }
 
     private func beginRequest() -> Int {

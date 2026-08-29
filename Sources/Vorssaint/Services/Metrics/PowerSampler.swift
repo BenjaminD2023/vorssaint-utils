@@ -87,14 +87,14 @@ final class PowerSampler {
             let reportedCharging = (props["IsCharging"] as? Bool) ?? false
 
             let voltageMv = (props["Voltage"] as? Int) ?? 0
-            let amperageMa = (props["Amperage"] as? Int) ?? (props["InstantAmperage"] as? Int) ?? 0
+            let amperageMa = intValue(props["InstantAmperage"]) ?? intValue(props["Amperage"])
             reading.isCharging = MetricFormat.batteryIsCharging(
                 reported: reportedCharging, amperageMilliamps: amperageMa)
             reading.timeRemainingSeconds = BatteryTimeSupport.remainingSeconds(
                 timeToEmptyMinutes: timeToEmptyMinutes(),
                 externalConnected: reading.externalConnected,
                 isCharging: reading.isCharging)
-            if voltageMv > 0, amperageMa != 0 {
+            if voltageMv > 0, let amperageMa, amperageMa != 0 {
                 // Power = V x I, signed by the amperage (negative while discharging).
                 reading.batteryWatts = (Double(voltageMv) / 1000.0) * (Double(amperageMa) / 1000.0)
             }

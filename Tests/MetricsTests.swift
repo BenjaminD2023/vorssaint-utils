@@ -775,9 +775,10 @@ struct MetricsTests {
         expect(BatteryTimeSupport.formatted(seconds: 30) == "0h 1m",
                "battery time keeps a positive final minute visible")
         expect(MetricFormat.batteryIsCharging(reported: false, amperageMilliamps: 1)
-                && MetricFormat.batteryIsCharging(reported: true, amperageMilliamps: 0)
-                && !MetricFormat.batteryIsCharging(reported: false, amperageMilliamps: 0),
-               "positive battery current overrides a lagging charging flag")
+                && !MetricFormat.batteryIsCharging(reported: true, amperageMilliamps: 0)
+                && MetricFormat.batteryIsCharging(reported: true, amperageMilliamps: nil)
+                && !MetricFormat.batteryIsCharging(reported: false, amperageMilliamps: -1),
+               "battery current overrides a lagging charging flag and falls back when unavailable")
 
         expect(MetricFormat.systemPowerWatts(measured: 3,
                                              batteryWatts: 10,
