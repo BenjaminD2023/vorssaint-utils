@@ -22,6 +22,7 @@ Vorssaint expands screen text recognition, clipboard, Super key, Dock Preview, A
 - Text snippets now include a visual date and time variable builder to configure formatting and timezones with live previews. Thanks to @tenbux.
 
 ### Changed
+- The menu panel's Settings button now opens the settings page of whichever hosted utility is currently on screen. Thanks to @andreisuslov.
 - Settings sidebar search and the Command Bar now group results beneath their main page, support arrow key navigation and deep-link directly to exact section anchors and Feature Hub rows. Thanks to @pergioa.
 - The screenshot editor drag-out handle now uses a dedicated icon instead of a preview thumbnail. Thanks to @Yahddyyp.
 - Simplified Chinese terminology is now unified across the app to match native macOS conventions for copying, saving, app names and confirmations. Thanks to @PathGao.
