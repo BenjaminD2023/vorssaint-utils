@@ -15035,6 +15035,37 @@ struct MetricsTests {
             encoding: .utf8)) ?? ""
         expect(!captureServiceSource.contains("replaceSelection"),
                "the capture service does not cancel and recreate selection controllers when changing modes")
+        // The preview appears unasked for, so presenting it must not take the
+        // keyboard away from whatever the person is typing into. Its shortcuts
+        // read a local monitor, which is delivered nothing until the panel is
+        // key. Presenting stays silent and hover takes nothing either; a click
+        // hands the keyboard over in the panel's sendEvent because hosted
+        // SwiftUI content answers presses that never reach mouseDown. Comments
+        // are stripped so prose naming the API cannot answer for the code.
+        let quickPreviewSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/ScreenshotQuickPreviewController.swift",
+            encoding: .utf8)) ?? ""
+        expect(!quickPreviewSource.isEmpty, "the screenshot preview source reads back for its shape check")
+        let quickPreviewCode = quickPreviewSource.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        // Split at the hosting controller: the hover closure is built above it,
+        // so the presentation statements are what remains.
+        let presentBody = quickPreviewCode.components(separatedBy: "let host = NSHostingController")
+            .dropFirst().first?.components(separatedBy: "private func").first ?? ""
+        expect(presentBody.contains("orderFrontRegardless()"),
+               "the screenshot preview is presented without activating the app")
+        // A click is the hand-off, and it is read in sendEvent because the
+        // hosted SwiftUI content answers presses that never reach mouseDown.
+        let panelBody = quickPreviewCode.components(separatedBy: "class ScreenshotQuickPreviewPanel")
+            .dropFirst().first?.components(separatedBy: "\n}").first ?? ""
+        let makeKeyCount = quickPreviewCode.components(separatedBy: "makeKey").count - 1
+        let panelMakeKeyCount = panelBody.components(separatedBy: "makeKey").count - 1
+        expect(makeKeyCount == panelMakeKeyCount && panelMakeKeyCount >= 1,
+               "presentation and hover never take key focus; only the panel's own click hand-off may")
+        expect(panelBody.contains("sendEvent") && panelBody.contains("leftMouseDown")
+                && panelBody.contains("makeKey") && panelBody.contains("super.sendEvent"),
+               "clicking the screenshot preview takes key focus and still delivers every preview button")
 
         let cocoa = ScreenshotSupport.cocoaRect(fromWindowServer: CGRect(x: 10, y: 30, width: 200, height: 100),
                                                 mainScreenHeight: 900)
