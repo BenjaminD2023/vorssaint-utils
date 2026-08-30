@@ -31,6 +31,7 @@ Vorssaint expands screen text recognition, clipboard, Super key, Dock Preview, A
 - Cleaner leftover scans now cover more preference panes and plugin folders while refusing nested app data, version folders, links and other ambiguous paths.
 
 ### Fixed
+- Window capture now includes attached sheets, alerts and modal dialogs stacked on the clicked window instead of omitting them from the capture. Thanks to @iltonandrew.
 - Accessibility messaging now uses a single, consistent process-wide timeout floor instead of allowing separate features to overwrite the shared limit. Thanks to @PathGao.
 - App Switcher now enumerates windows on a background queue, keeping shortcuts and typing responsive even when apps delay Accessibility responses. Thanks to @MaximilianMauroner.
 - App Switcher now lists windows from apps that draw their own title bar or use borderless windows. Thanks to @PathGao.
