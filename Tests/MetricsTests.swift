@@ -14426,6 +14426,65 @@ struct MetricsTests {
             protectedWindowIDs: protectedScreenshotWindows
         ), "screenshot cannot pick its own protected capture UI")
 
+        // A sheet or dialog the app stacked on the clicked window is a window
+        // of its own, so a single-window capture leaves it out of a shot it is
+        // plainly part of (issue #1098). Same app, in front, and lying wholly
+        // inside the clicked window is the shape that describes one; anything
+        // reaching past its edge is left alone, because drawing a window the
+        // person did not choose is worse than leaving a dialog out.
+        typealias CaptureWindow = ScreenshotCapturePolicy.CaptureWindow
+        let capturedWindow = CaptureWindow(
+            id: 1, ownerPID: 500, frame: CGRect(x: 100, y: 100, width: 800, height: 600))
+        let sheet = CaptureWindow(
+            id: 2, ownerPID: 500, frame: CGRect(x: 300, y: 100, width: 400, height: 300))
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [sheet, capturedWindow])
+            == ScreenshotCapturePolicy.AttachedCapturePlan(
+                windowIDs: [1, 2], bounds: capturedWindow.frame),
+               "a sheet on the clicked window joins its capture, the window drawn first")
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [capturedWindow, sheet]) == nil,
+               "a window behind the clicked one is not stacked on it")
+        let windowOfAnotherApp = CaptureWindow(
+            id: 3, ownerPID: 900, frame: CGRect(x: 300, y: 100, width: 400, height: 300))
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [windowOfAnotherApp, capturedWindow]) == nil,
+               "another application's window over the clicked one stays out of the shot")
+        // The case that decides the rule: a compose or second document window
+        // of the same app, in front and overlapping, but reaching past the
+        // edge. It is not what was asked for, so the ordinary capture answers.
+        let composeWindow = CaptureWindow(
+            id: 4, ownerPID: 500, frame: CGRect(x: 700, y: 300, width: 500, height: 400))
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [composeWindow, capturedWindow]) == nil,
+               "a same-app window reaching past the clicked window is not drawn into its shot")
+        let detachedWindow = CaptureWindow(
+            id: 5, ownerPID: 500, frame: CGRect(x: 2_000, y: 100, width: 200, height: 200))
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [detachedWindow, capturedWindow]) == nil,
+               "a window of the same app that does not touch the clicked one is not attached")
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [capturedWindow]) == nil,
+               "a window with nothing stacked on it keeps the ordinary single-window capture")
+        // A sheet is often exactly as wide as the window it drops out of, so
+        // the rule has to take one that matches an edge rather than shrink from
+        // it.
+        let fullWidthSheet = CaptureWindow(
+            id: 6, ownerPID: 500, frame: CGRect(x: 100, y: 100, width: 800, height: 200))
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [fullWidthSheet, capturedWindow])?.windowIDs
+            == [1, 6],
+               "a sheet the full width of its window still joins the capture")
+        // Two stacked windows are drawn in the order they are shown.
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow,
+            frontToBack: [sheet, fullWidthSheet, capturedWindow])?.windowIDs == [1, 6, 2],
+               "what is stacked on the window is drawn back to front")
+        // A target the list does not hold cannot have anything in front of it.
+        expect(ScreenshotCapturePolicy.attachedCapturePlan(
+            target: capturedWindow, frontToBack: [sheet]) == nil,
+               "a window missing from the list does not treat everything as stacked on it")
+
         expect(ScreenshotSupport.sanitizedDelay(5) == 5
                 && ScreenshotSupport.sanitizedDelay(7) == 0
                 && ScreenshotSupport.sanitizedDelay(-3) == 0,
