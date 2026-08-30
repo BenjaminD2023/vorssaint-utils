@@ -16,7 +16,6 @@ enum MenuBarMetricSpacing: String, CaseIterable {
         return MenuBarMetricSpacing(rawValue: Defaults.sanitizedMenuBarMetricSpacing(raw)) ?? .standard
     }
 }
-
 /// How a percentage-based monitor reading appears in the menu bar. Values keep
 /// the numeric block; bars replace it with a compact vertical gauge. CPU, GPU,
 /// memory, disk usage, battery and accessory batteries each pick independently,
