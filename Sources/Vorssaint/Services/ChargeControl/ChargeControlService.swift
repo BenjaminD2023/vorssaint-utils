@@ -28,7 +28,7 @@ final class ChargeControlService: ObservableObject {
     @Published private(set) var enabled = true
     @Published private(set) var limitPercent = ChargeControlPolicy.defaultLimit
     @Published private(set) var sailingEnabled = false
-    @Published private(set) var sailingMinimumPercent = ChargeControlPolicy.defaultSailingMinimum
+    @Published private(set) var sailingRangePercent = ChargeControlPolicy.defaultSailingRange
     @Published private(set) var mode: ChargeControlMode = .limit
     @Published private(set) var appliedGate: ChargeControlGate = .allowCharging
     @Published private(set) var now = Date()
@@ -200,7 +200,7 @@ final class ChargeControlService: ObservableObject {
         let cap = ChargeControlPolicy.sanitizedLimit(percent)
         UserDefaults.standard.set(cap, forKey: DefaultsKey.chargeLimitPercent)
         limitPercent = cap
-        setSailingMinimum(sailingMinimumPercent, evaluateAfterChange: false)
+        setSailingRange(sailingRangePercent, evaluateAfterChange: false)
         if accessState != .enabled { ensureHelperForControl() }
         evaluate(refreshBattery: false)
     }
@@ -212,8 +212,8 @@ final class ChargeControlService: ObservableObject {
         evaluate()
     }
 
-    func setSailingMinimum(_ percent: Int) {
-        setSailingMinimum(percent, evaluateAfterChange: true)
+    func setSailingRange(_ percent: Int) {
+        setSailingRange(percent, evaluateAfterChange: true)
     }
 
     func startDischargeToLimit() {
@@ -328,7 +328,7 @@ final class ChargeControlService: ObservableObject {
         let gate = ChargeControlPolicy.desiredGate(
             chargePercent: chargePercent ?? 0,
             limit: limitPercent,
-            sailingMinimum: sailingEnabled ? sailingMinimumPercent : nil,
+            sailingRange: sailingEnabled ? sailingRangePercent : nil,
             wasInhibited: appliedGate == .inhibitCharging,
             mode: mode,
             family: profile?.family ?? snapshot.profile?.family)
@@ -547,8 +547,10 @@ final class ChargeControlService: ObservableObject {
         now = Date()
         if gateChanged {
             SystemMonitor.shared.powerStateDidChange()
-            DispatchQueue.main.asyncAfter(deadline: .now() + ChargeControlPolicy.pollInterval / 4) { [weak self] in
-                self?.sampleBattery()
+            for delay in ChargeControlPolicy.postGateRefreshDelays {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.sampleBattery(notifyMonitor: true)
+                }
             }
         }
     }
@@ -626,7 +628,7 @@ final class ChargeControlService: ObservableObject {
         }
     }
 
-    private func sampleBattery() {
+    private func sampleBattery(notifyMonitor: Bool = false) {
         hasBattery = PowerSampler.hasInternalBattery
         guard hasBattery else {
             chargePercent = nil
@@ -640,7 +642,7 @@ final class ChargeControlService: ObservableObject {
         chargePercent = reading.chargePercent
         isCharging = reading.isCharging
         externalConnected = reading.externalConnected
-        if stateChanged { SystemMonitor.shared.powerStateDidChange() }
+        if stateChanged || notifyMonitor { SystemMonitor.shared.powerStateDidChange() }
     }
 
     private func refreshFromDefaults() {
@@ -648,16 +650,16 @@ final class ChargeControlService: ObservableObject {
         enabled = defaults.object(forKey: DefaultsKey.chargeLimitEnabled) as? Bool ?? true
         limitPercent = ChargeControlPolicy.sanitizedLimit(defaults.integer(forKey: DefaultsKey.chargeLimitPercent))
         sailingEnabled = defaults.bool(forKey: DefaultsKey.chargeSailingEnabled)
-        sailingMinimumPercent = ChargeControlPolicy.sanitizedSailingMinimum(
-            defaults.integer(forKey: DefaultsKey.chargeSailingMinimumPercent),
+        sailingRangePercent = ChargeControlPolicy.sanitizedSailingRange(
+            defaults.integer(forKey: DefaultsKey.chargeSailingRangePercent),
             limit: limitPercent)
         hasBattery = PowerSampler.hasInternalBattery
     }
 
-    private func setSailingMinimum(_ percent: Int, evaluateAfterChange: Bool) {
-        let minimum = ChargeControlPolicy.sanitizedSailingMinimum(percent, limit: limitPercent)
-        UserDefaults.standard.set(minimum, forKey: DefaultsKey.chargeSailingMinimumPercent)
-        sailingMinimumPercent = minimum
+    private func setSailingRange(_ percent: Int, evaluateAfterChange: Bool) {
+        let range = ChargeControlPolicy.sanitizedSailingRange(percent, limit: limitPercent)
+        UserDefaults.standard.set(range, forKey: DefaultsKey.chargeSailingRangePercent)
+        sailingRangePercent = range
         if evaluateAfterChange {
             if accessState != .enabled { ensureHelperForControl() }
             evaluate(refreshBattery: false)

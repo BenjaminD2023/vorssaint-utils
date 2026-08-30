@@ -309,6 +309,8 @@ enum DefaultsKey {
     static let chargeLimitEnabled = "chargeLimitEnabled"
     static let chargeLimitPercent = "chargeLimitPercent"
     static let chargeSailingEnabled = "chargeSailingEnabled"
+    static let chargeSailingRangePercent = "chargeSailingRangePercent"
+    // Previous absolute restart level, read once by the migration below.
     static let chargeSailingMinimumPercent = "chargeSailingMinimumPercent"
     static let panelShowChargeControl = "panelShowChargeControl"
     static let chargeControlRecoveryNeeded = "chargeControlRecoveryNeeded"
@@ -1048,7 +1050,7 @@ enum Defaults {
         DefaultsKey.chargeLimitEnabled: true,
         DefaultsKey.chargeLimitPercent: 80,
         DefaultsKey.chargeSailingEnabled: false,
-        DefaultsKey.chargeSailingMinimumPercent: 70,
+        DefaultsKey.chargeSailingRangePercent: 5,
         DefaultsKey.panelShowChargeControl: true,
         DefaultsKey.chargeControlRecoveryNeeded: false,
         DefaultsKey.chargeControlHelperVersion: "",
@@ -1283,6 +1285,7 @@ enum Defaults {
     static func register() {
         let defaults = UserDefaults.standard
         migrateFanControlVisibility(in: defaults)
+        migrateChargeSailingRange(in: defaults)
         migrateScrollInverterAxes(in: defaults)
         migrateWhatsAppDownloadsEnabled(in: defaults)
         defaults.register(defaults: registeredDefaults)
@@ -1354,6 +1357,17 @@ enum Defaults {
             }
         }
         defaults.removeObject(forKey: DefaultsKey.monitorShowFanControlBeta)
+    }
+
+    static func migrateChargeSailingRange(in defaults: UserDefaults) {
+        defer { defaults.removeObject(forKey: DefaultsKey.chargeSailingMinimumPercent) }
+        guard defaults.object(forKey: DefaultsKey.chargeSailingRangePercent) == nil,
+              let legacyMinimum = (defaults.object(forKey: DefaultsKey.chargeSailingMinimumPercent)
+                                   as? NSNumber)?.intValue else { return }
+        let limit = (defaults.object(forKey: DefaultsKey.chargeLimitPercent) as? NSNumber)?.intValue
+            ?? ChargeControlPolicy.defaultLimit
+        defaults.set(ChargeControlPolicy.sanitizedSailingRange(limit - legacyMinimum, limit: limit),
+                     forKey: DefaultsKey.chargeSailingRangePercent)
     }
 
     /// The "show the desktop app without windows" toggle became one choice of

@@ -124,13 +124,15 @@ enum ChargeControlPolicy {
     static let minimumLimit = 20
     static let maximumLimit = 100
     static let defaultLimit = 80
-    static let minimumSailingLimit = 10
-    static let defaultSailingMinimum = 70
+    static let minimumSailingBoundary = 10
+    static let minimumSailingRange = 1
+    static let defaultSailingRange = 5
     static let hysteresis = 2
     static let calibrationFloor = 10
     static let calibrationFull = 100
     static let calibrationHold: TimeInterval = 60 * 60
     static let pollInterval: TimeInterval = 2
+    static let postGateRefreshDelays: [TimeInterval] = [0.25, 0.75, 1.5]
     static let heartbeatLimit: TimeInterval = 7
     static let intelDischargeBCLM = 10
 
@@ -138,14 +140,18 @@ enum ChargeControlPolicy {
         (minimumLimit...maximumLimit).contains(percent) ? percent : defaultLimit
     }
 
-    static func sanitizedSailingMinimum(_ percent: Int, limit: Int) -> Int {
+    static func maximumSailingRange(limit: Int) -> Int {
         let cap = sanitizedLimit(limit)
-        return min(max(percent, minimumSailingLimit), cap - 1)
+        return max(minimumSailingRange, cap - minimumSailingBoundary)
+    }
+
+    static func sanitizedSailingRange(_ percent: Int, limit: Int) -> Int {
+        min(max(percent, minimumSailingRange), maximumSailingRange(limit: limit))
     }
 
     static func desiredGate(chargePercent: Int,
                             limit: Int,
-                            sailingMinimum: Int? = nil,
+                            sailingRange: Int? = nil,
                             wasInhibited: Bool,
                             mode: ChargeControlMode,
                             family: ChargeControlFamily?) -> ChargeControlGate {
@@ -163,14 +169,17 @@ enum ChargeControlPolicy {
 
         guard cap < maximumLimit else { return .allowCharging }
 
-        if family == .intelBCLM, sailingMinimum == nil {
+        if family == .intelBCLM, sailingRange == nil {
             return .inhibitCharging
         }
 
         if chargePercent >= cap { return .inhibitCharging }
-        let resumeAt = sailingMinimum.map { sanitizedSailingMinimum($0, limit: cap) }
-            ?? cap - hysteresis
-        if wasInhibited && chargePercent > resumeAt { return .inhibitCharging }
+        if let sailingRange {
+            let resumeBelow = cap - sanitizedSailingRange(sailingRange, limit: cap)
+            if wasInhibited && chargePercent >= resumeBelow { return .inhibitCharging }
+        } else if wasInhibited && chargePercent > cap - hysteresis {
+            return .inhibitCharging
+        }
         return .allowCharging
     }
 

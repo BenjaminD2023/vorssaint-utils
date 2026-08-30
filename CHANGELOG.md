@@ -13,9 +13,10 @@ Vorssaint expands screen text recognition, clipboard, Super key, Dock Preview, A
 - Charge Limit can stop charging at a chosen level (20–100%), discharge down to
   that level, and run a full battery calibration cycle. Off by default in
   Features, with a segmented battery bar and slider in the menu bar panel, on
-  the Battery metric page, and under Energy. Optional Sailing mode waits for a
-  lower level before charging resumes. While plugged in, Discharge drains to
-  the limit and Top up temporarily charges to 100%.
+  the Battery metric page, and under Energy. Optional Sailing range waits for
+  the battery to fall a chosen percentage below the limit before charging
+  resumes. While plugged in, Discharge drains to the limit and Top up
+  temporarily charges to 100%.
 - The menu bar battery icon turns yellow while Low Power Mode is on and shows
   live charge fill with native charging and plugged-in indicators.
 - Window Layout now offers configurable window and screen gaps, so snapped windows can keep a preset distance from each other and from the screen edge. Thanks to @marcelharinck.
@@ -48,6 +49,8 @@ Vorssaint expands screen text recognition, clipboard, Super key, Dock Preview, A
   are accepted.
 - Charge Limit applies the latest slider value immediately after an active
   helper write instead of waiting for the next two-second poll.
+- Charge Limit rechecks battery telemetry after every gate change so the menu
+  bar shows charging or holding without waiting for the background power poll.
 - Accessibility messaging now uses a single, consistent process-wide timeout floor instead of allowing separate features to overwrite the shared limit. Thanks to @PathGao.
 - App Switcher now enumerates windows on a background queue, keeping shortcuts and typing responsive even when apps delay Accessibility responses. Thanks to @MaximilianMauroner.
 - App Switcher now lists windows from apps that draw their own title bar or use borderless windows. Thanks to @PathGao.

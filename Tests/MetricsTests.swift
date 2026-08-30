@@ -12120,8 +12120,19 @@ struct MetricsTests {
                 && (Defaults.registeredDefaults[DefaultsKey.chargeLimitEnabled] as? Bool) == true
                 && (Defaults.registeredDefaults[DefaultsKey.chargeLimitPercent] as? Int) == 80
                 && (Defaults.registeredDefaults[DefaultsKey.chargeSailingEnabled] as? Bool) == false
-                && (Defaults.registeredDefaults[DefaultsKey.chargeSailingMinimumPercent] as? Int) == 70,
+                && (Defaults.registeredDefaults[DefaultsKey.chargeSailingRangePercent] as? Int) == 5,
                "charge limit starts at 80 percent with optional sailing off")
+        let sailingMigrationSuite = "com.vorssaint.tests.chargeSailingRange"
+        if let sailingMigration = UserDefaults(suiteName: sailingMigrationSuite) {
+            sailingMigration.removePersistentDomain(forName: sailingMigrationSuite)
+            sailingMigration.set(90, forKey: DefaultsKey.chargeLimitPercent)
+            sailingMigration.set(85, forKey: DefaultsKey.chargeSailingMinimumPercent)
+            Defaults.migrateChargeSailingRange(in: sailingMigration)
+            expect(sailingMigration.integer(forKey: DefaultsKey.chargeSailingRangePercent) == 5
+                    && sailingMigration.object(forKey: DefaultsKey.chargeSailingMinimumPercent) == nil,
+                   "absolute sailing minimums migrate to a range below the charge limit")
+            sailingMigration.removePersistentDomain(forName: sailingMigrationSuite)
+        }
 
         for language in AppLanguage.allCases {
             let strings = FeatureStrings.diskImageInstaller(language)
@@ -12457,10 +12468,13 @@ struct MetricsTests {
                 && ChargeControlPolicy.sanitizedLimit(5) == 80
                 && Defaults.sanitizedChargeLimit(12) == 80,
                "charge limits stay inside 20...100 and fall back to 80")
-        expect(ChargeControlPolicy.sanitizedSailingMinimum(70, limit: 80) == 70
-                && ChargeControlPolicy.sanitizedSailingMinimum(80, limit: 80) == 79
-                && ChargeControlPolicy.sanitizedSailingMinimum(5, limit: 20) == 10,
-               "sailing minimums stay below their charge limit")
+        expect(ChargeControlPolicy.sanitizedSailingRange(5, limit: 90) == 5
+                && ChargeControlPolicy.sanitizedSailingRange(0, limit: 90) == 1
+                && ChargeControlPolicy.sanitizedSailingRange(90, limit: 90) == 80
+                && ChargeControlPolicy.maximumSailingRange(limit: 20) == 10,
+               "sailing ranges stay between one percent and the ten-percent battery floor")
+        expect(ChargeControlPolicy.postGateRefreshDelays == [0.25, 0.75, 1.5],
+               "charge-gate changes recheck battery telemetry three times within 1.5 seconds")
         expect(ChargeLimitBarSupport.filledSegmentCount(for: 0) == 0
                 && ChargeLimitBarSupport.filledSegmentCount(for: 63) == 13
                 && ChargeLimitBarSupport.filledSegmentCount(for: 100) == 20
@@ -12487,19 +12501,22 @@ struct MetricsTests {
                                                    wasInhibited: true, mode: .limit,
                                                    family: .appleSiliconCHT) == .allowCharging,
                "Apple Silicon uses a 2 percent hysteresis before charging again")
-        expect(ChargeControlPolicy.desiredGate(chargePercent: 71, limit: 80,
-                                               sailingMinimum: 70, wasInhibited: true,
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 86, limit: 90,
+                                               sailingRange: 5, wasInhibited: true,
                                                mode: .limit, family: .appleSiliconCHT) == .inhibitCharging
-                && ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
-                                                   sailingMinimum: 70, wasInhibited: true,
+                && ChargeControlPolicy.desiredGate(chargePercent: 85, limit: 90,
+                                                   sailingRange: 5, wasInhibited: true,
+                                                   mode: .limit, family: .appleSiliconCHT) == .inhibitCharging
+                && ChargeControlPolicy.desiredGate(chargePercent: 84, limit: 90,
+                                                   sailingRange: 5, wasInhibited: true,
                                                    mode: .limit, family: .appleSiliconCHT) == .allowCharging
-                && ChargeControlPolicy.desiredGate(chargePercent: 80, limit: 80,
-                                                   sailingMinimum: 70, wasInhibited: false,
+                && ChargeControlPolicy.desiredGate(chargePercent: 90, limit: 90,
+                                                   sailingRange: 5, wasInhibited: false,
                                                    mode: .limit, family: .intelBCLM) == .inhibitCharging
-                && ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
-                                                   sailingMinimum: 70, wasInhibited: true,
+                && ChargeControlPolicy.desiredGate(chargePercent: 84, limit: 90,
+                                                   sailingRange: 5, wasInhibited: true,
                                                    mode: .limit, family: .intelBCLM) == .allowCharging,
-               "sailing holds from 80 to 70 percent on Apple Silicon and Intel")
+               "a five-percent sailing range at 90 holds through 85 and resumes below it")
         expect(ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
                                                wasInhibited: false, mode: .limit,
                                                family: .intelBCLM) == .inhibitCharging,
@@ -17400,7 +17417,8 @@ struct MetricsTests {
         expect(backupKeys.contains(DefaultsKey.chargeLimitEnabled)
                 && backupKeys.contains(DefaultsKey.chargeLimitPercent)
                 && backupKeys.contains(DefaultsKey.chargeSailingEnabled)
-                && backupKeys.contains(DefaultsKey.chargeSailingMinimumPercent)
+                && backupKeys.contains(DefaultsKey.chargeSailingRangePercent)
+                && !backupKeys.contains(DefaultsKey.chargeSailingMinimumPercent)
                 && backupKeys.contains(DefaultsKey.panelShowChargeControl)
                 && !backupKeys.contains(DefaultsKey.chargeControlRecoveryNeeded)
                 && !backupKeys.contains(DefaultsKey.chargeControlHelperVersion),
