@@ -31,6 +31,7 @@ Vorssaint expands screen text recognition, clipboard, Super key, Dock Preview, A
 - Cleaner leftover scans now cover more preference panes and plugin folders while refusing nested app data, version folders, links and other ambiguous paths.
 
 ### Fixed
+- Uninstallation now verifies that sleep was restored and asks for admin authorization if the passwordless restore fails, preventing closed-lid sleep prevention from remaining permanently disabled on the Mac. Thanks to @mugurc.
 - Screenshot quick preview no longer takes keyboard focus when presented, keeping keystrokes in the active app until the preview is clicked. Thanks to @iltonandrew.
 - Smooth Scroll and Scroll Inverter now release their event taps during fast user switching and rebuild them on return, preventing background scroll stalls. Thanks to @iltonandrew.
 - Window capture now includes attached sheets, alerts and modal dialogs stacked on the clicked window instead of omitting them from the capture. Thanks to @iltonandrew.
