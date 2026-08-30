@@ -10,9 +10,10 @@ All notable changes to this project are documented here. The format follows
 - Charge Limit can stop charging at a chosen level (20–100%), discharge down to
   that level, and run a full battery calibration cycle. Off by default in
   Features, with a dial in the menu bar panel, a slider on the Battery metric
-  page, and under Energy. While plugged in, Discharge and Top up sit under
-  Battery in the menu bar panel; Discharge drains to the limit and Top up
-  temporarily charges to 100%.
+  page, and under Energy. Optional Sailing range waits for the battery to fall a
+  chosen percentage below the limit before charging resumes. While plugged in,
+  Discharge and Top up sit under Battery in the menu bar panel; Discharge drains
+  to the limit and Top up temporarily charges to 100%.
 - The menu bar battery icon turns yellow while Low Power Mode is on, matching
   the system battery indicator.
 - The menu bar battery icon uses the system battery symbol (live fill, Control
@@ -37,6 +38,10 @@ All notable changes to this project are documented here. The format follows
 - Charge Limit now starts the charging helper when you set a limit, so the Mac
   actually stops charging at that level instead of only remembering the number.
 - App Switcher takes over the system Command-Tab switcher while it is enabled.
+- Charge Limit applies the latest slider value immediately after an active
+  helper write instead of waiting for the next two-second poll.
+- Charge Limit rechecks battery telemetry after every gate change so the menu
+  bar shows charging or holding without waiting for the background power poll.
 
 ## [3.3.3-beta.3] - 2026-08-26
 

@@ -357,25 +357,25 @@ struct ChargeControlCardContent: View {
 
             if service.sailingEnabled {
                 HStack {
-                    Text(strings.sailingMinimumLabel)
+                    Text(strings.sailingRangeLabel)
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text("\(service.sailingMinimumPercent)%")
+                    Text("\(service.sailingRangePercent)%")
                         .font(.system(size: 12, weight: .semibold).monospacedDigit())
                         .foregroundStyle(ChargeLimitPalette.lime(for: colorScheme))
                 }
                 ChargeLimitSlider(
                     value: Binding(
-                        get: { Double(service.sailingMinimumPercent) },
-                        set: { service.setSailingMinimum(Int($0.rounded())) }
+                        get: { Double(service.sailingRangePercent) },
+                        set: { service.setSailingRange(Int($0.rounded())) }
                     ),
-                    range: Double(ChargeControlPolicy.minimumSailingLimit)...Double(
-                        max(ChargeControlPolicy.minimumSailingLimit, service.limitPercent - 1))
+                    range: Double(ChargeControlPolicy.minimumSailingRange)...Double(
+                        ChargeControlPolicy.maximumSailingRange(limit: service.limitPercent))
                 )
                 .disabled(service.isCalibrating)
                 .opacity(service.isCalibrating ? 0.45 : 1)
-                .accessibilityLabel(strings.sailingMinimumLabel)
+                .accessibilityLabel(strings.sailingRangeLabel)
 
                 if !compact {
                     Text(strings.sailingCaption)
