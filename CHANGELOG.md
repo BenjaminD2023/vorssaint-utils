@@ -39,6 +39,7 @@ Vorssaint expands screen text recognition, capture magnifier, clipboard, Super k
 - Cleaner leftover scans now cover more preference panes and plugin folders while refusing nested app data, version folders, links and other ambiguous paths.
 
 ### Fixed
+- Quit on close now captures windows created asynchronously after launch or on activation, ensuring apps that load their windows after process startup are quit when their last window is closed.
 - Shortcut fields and key display now read key caps from the active keyboard layout, so non-QWERTY layouts such as AZERTY display the keys actually pressed.
 - The Uninstaller and Cleaner leftover scans now accept two-component bundle identifiers, allowing apps with two-part domain names to be selected and cleaned.
 - The permission guide card now offers a start-over option when an entry left by an earlier app build is stuck on in System Settings, and adds a relaunch button once Screen Recording is granted. Thanks to @andreisuslov.

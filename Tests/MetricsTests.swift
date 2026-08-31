@@ -4873,6 +4873,9 @@ struct MetricsTests {
         expect(!AutoQuitSupport.shouldScheduleWindowCheck(for: .appDeactivated,
                                                           hasRecentCloseRequest: false),
                "AutoQuit does not treat app deactivation as a window close")
+        expect(!AutoQuitSupport.shouldScheduleWindowCheck(for: .appActivated,
+                                                          hasRecentCloseRequest: false),
+               "AutoQuit does not treat app activation as a window close")
         expect(!AutoQuitSupport.shouldScheduleWindowCheck(for: .mainWindowChanged,
                                                           hasRecentCloseRequest: false),
                "AutoQuit does not treat main window changes as a window close")
@@ -4963,24 +4966,34 @@ struct MetricsTests {
 
         expect(AutoQuitSupport.needsWindowWatchRetry(registeredWindows: 0,
                                                      listedWindows: 0,
-                                                     foundUserWindow: true),
+                                                     foundUserWindow: true,
+                                                     hadPriorWindows: false),
                "an app the window server still shows a window for is watched again")
         expect(AutoQuitSupport.needsWindowWatchRetry(registeredWindows: 1,
                                                      listedWindows: 2,
-                                                     foundUserWindow: true),
+                                                     foundUserWindow: true,
+                                                     hadPriorWindows: false),
                "a listed window whose notification failed is watched again")
         expect(!AutoQuitSupport.needsWindowWatchRetry(registeredWindows: 2,
-                                                      listedWindows: 2,
-                                                      foundUserWindow: true),
+                                                       listedWindows: 2,
+                                                       foundUserWindow: true,
+                                                       hadPriorWindows: false),
                "two registered windows cover the two Accessibility listed windows")
         expect(!AutoQuitSupport.needsWindowWatchRetry(registeredWindows: 1,
-                                                      listedWindows: 1,
-                                                      foundUserWindow: true),
+                                                       listedWindows: 1,
+                                                       foundUserWindow: true,
+                                                       hadPriorWindows: false),
                "a registered window is the watch, so nothing is retried")
+        expect(AutoQuitSupport.needsWindowWatchRetry(registeredWindows: 0,
+                                                     listedWindows: 0,
+                                                     foundUserWindow: false,
+                                                     hadPriorWindows: false),
+               "an app with no window on launch is retried during the initial watch window")
         expect(!AutoQuitSupport.needsWindowWatchRetry(registeredWindows: 0,
-                                                      listedWindows: 0,
-                                                      foundUserWindow: false),
-               "an app with no window anywhere is not eligible and needs no watch")
+                                                       listedWindows: 0,
+                                                       foundUserWindow: false,
+                                                       hadPriorWindows: true),
+               "an app that had prior windows and now closed its last window needs no watch retry")
         expect(AutoQuitSupport.isWindowNotificationRegistered(.success),
                "a window whose notification was accepted is watched")
         expect(AutoQuitSupport.isWindowNotificationRegistered(.notificationAlreadyRegistered),
