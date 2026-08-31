@@ -6540,6 +6540,21 @@ struct MetricsTests {
                "a regular app within the depth cap is still found")
         expect(owningApp(of: 0) == nil,
                "a missing responsible pid maps to no app")
+        func resolvedOwningApp(responsible: pid_t, pid: pid_t, regularApps: Set<pid_t> = [100]) -> pid_t? {
+            let isRegular: (pid_t) -> Bool = { regularApps.contains($0) }
+            let parent: (pid_t) -> pid_t = { helperParents[$0] ?? 0 }
+            return MixerRoutingSupport.owningRegularAppPid(
+                responsiblePid: responsible,
+                isRegularApp: isRegular,
+                parentPid: parent
+            ) ?? (responsible != pid ? MixerRoutingSupport.owningRegularAppPid(
+                responsiblePid: pid,
+                isRegularApp: isRegular,
+                parentPid: parent
+            ) : nil)
+        }
+        expect(resolvedOwningApp(responsible: 700, pid: 500) == 100,
+               "a helper whose responsibility returns a daemon still falls back to its parent app")
         expect(!MixerRoutingSupport.requiresEngine(volume: 1,
                                                    selectedOutputDeviceUID: nil,
                                                    targetOutputDeviceUID: "BuiltInSpeakerDevice",
