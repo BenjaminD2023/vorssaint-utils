@@ -104,7 +104,7 @@ final class ChargeControlService: ObservableObject {
                 restoreCharging()
             }
             startTimerIfNeeded()
-            evaluate()
+            refresh()
         } else {
             cancelTransientModes()
             restoreThenUnregister()
