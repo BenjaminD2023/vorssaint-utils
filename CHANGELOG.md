@@ -57,6 +57,7 @@ Vorssaint expands screen text recognition, clipboard, Super key, Dock Preview, A
 - Volume Mixer now silences unwritten output frames to prevent stuttering from stale audio buffers and bounds concurrent teardowns so stalled system audio cleanup does not block other apps or background threads. Thanks to @PathGao.
 - App updates, uninstallation, bundle migration and relaunch helpers now run detached in their own session, ensuring they complete when the app terminates under session management. Thanks to @PathGao.
 - App Switcher now recognizes floating and undescribed workspace windows from professional media apps.
+- App Switcher now keeps adaptive app icons stable when navigating selection in dark mode instead of briefly flickering their light artwork. Thanks to @EugeneCarldotme.
 - Super key now restores its source when the app is force-quit, preventing Caps Lock or a right-side modifier from being left inactive.
 - App Switcher now rejects stale hidden-Space surfaces without hiding real fullscreen windows on another Space. Thanks to @naveenkrdy.
 - App Switcher middle-click now closes only the card under the pointer and leaves panel chrome untouched.
