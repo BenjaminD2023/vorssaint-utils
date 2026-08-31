@@ -2973,6 +2973,8 @@ struct MetricsTests {
                "keyboard debounce per-key windows start empty")
         expect(registeredDefaults[DefaultsKey.panelUtilityCleaning] as? Bool == true,
                "panel cleaning utility is visible by default")
+        expect(registeredDefaults[DefaultsKey.cleaningModeKeepScreenVisible] as? Bool == false,
+               "cleaning mode keep screen visible is disabled by default")
         expect(registeredDefaults[DefaultsKey.panelUtilityURLCleaner] as? Bool == true,
                "panel URL cleaner utility is visible by default")
         expect(registeredDefaults[DefaultsKey.panelUtilityUninstaller] as? Bool == true,
@@ -11200,6 +11202,12 @@ struct MetricsTests {
                               strings.qrResultTitle, strings.qrResultCopy, strings.qrResultOpen]
             expect(ocrStrings.allSatisfy { !$0.isEmpty && !$0.contains("—") },
                    "\(prefix) screen OCR strings are present without em dash")
+            let cleaningStrings = [strings.cleaningKeepScreenVisibleToggle, strings.cleaningKeepScreenVisibleCaption,
+                                   strings.cleaningStartNow, strings.cleaningOverlayTitle,
+                                   strings.cleaningOverlaySubtitle, strings.cleaningOverlayUnlock,
+                                   strings.cleaningOverlayMouseHint, strings.cleaningPanelCaption]
+            expect(cleaningStrings.allSatisfy { !$0.isEmpty && !$0.contains("—") },
+                   "\(prefix) cleaning mode strings are present without em dash")
             let highlightsStrings = [strings.highlightsTitle, strings.highlightsTitleClipboardRedesign,
                                      strings.highlightsCaptionDockPreview,
                                      strings.highlightsCaptionScreenshot,
@@ -13052,10 +13060,11 @@ struct MetricsTests {
         expect(AppFeature.windowMaximizer.settingsDestination
                 == FeatureSettingsDestination(.general, sectionAnchor: .panelConfiguration)
                 && AppFeature.mixer.settingsDestination
-                == FeatureSettingsDestination(.general, sectionAnchor: .panelConfiguration)
-                && AppFeature.cleaningMode.settingsDestination
                 == FeatureSettingsDestination(.general, sectionAnchor: .panelConfiguration),
                "panel-oriented features land on General panel configuration")
+        expect(AppFeature.cleaningMode.settingsDestination
+                == FeatureSettingsDestination(.quickTools, sectionAnchor: .cleaningMode),
+               "cleaning mode lands on Quick Tools cleaning mode section")
         expect(AppFeature.musicBlock.settingsDestination
                 == FeatureSettingsDestination(.general, sectionAnchor: .musicBlocking)
                 && AppFeature.soundOutputSwitcher.settingsDestination
@@ -17455,6 +17464,8 @@ struct MetricsTests {
                "backup carries preferences, menu bar pins, Keep Awake appearance, language and hub availability")
         expect(backupKeys.contains(DefaultsKey.launchAtLoginWanted),
                "the launch at login choice travels with the settings backup")
+        expect(backupKeys.contains(DefaultsKey.cleaningModeKeepScreenVisible),
+               "the cleaning mode keep screen visible choice travels with the settings backup")
         expect(backupKeys.contains(DefaultsKey.appearance),
                "the light or dark choice travels with the settings backup")
         expect(Set([

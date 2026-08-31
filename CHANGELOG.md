@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows
 Vorssaint expands screen text recognition, clipboard, Super key, Dock Preview, App Switcher, Window Layout, mouse button shortcuts and snippet controls, broadens app update and safe cleanup discovery, and hardens permission guide recovery, Smooth Scroll and Scroll Inverter session switching, Accessibility timeouts, Volume Mixer audio rendering and teardown, Super key shutdown, process termination, update and uninstallation teardown, window handling, pasteboard restoration, sensor selection, Cleaning Mode unlock and favicon downloads. It also improves disk space metrics, Settings, Scratchpad, Screenshot Editor, floating panels and several menu bar behaviors.
 
 ### Added
+- Cleaning Mode now offers an option in Settings to keep the screen visible with a discreet corner indicator instead of blacking out the screen.
 - Mouse button shortcuts can now switch Spaces or open Mission Control and App Exposé by holding an extra button and dragging. Thanks to @iltonandrew.
 - Window Layout now offers configurable window and screen gaps, so snapped windows can keep a preset distance from each other and from the screen edge. Thanks to @marcelharinck.
 - Eject all disks can now exclude specific drives in Settings, keeping backup drives and permanent storage mounted when ejecting other external disks.
