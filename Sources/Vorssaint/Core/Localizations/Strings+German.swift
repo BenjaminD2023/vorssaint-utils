@@ -981,6 +981,8 @@ extension Strings {
         switcherScreenPlacementMenuBar: "Bildschirm mit der Menüleiste",
         switcherScreenPlacementActiveWindow: "Bildschirm mit dem aktiven Fenster",
         switcherScreenPlacementCaption: "Auf welchem Bildschirm der Umschalter erscheint, wenn mehrere angeschlossen sind.",
-        smoothScrollResponseLabel: "Reaktion"
+        smoothScrollResponseLabel: "Reaktion",
+        mouseAccelerationName: "Mausbeschleunigung deaktivieren",
+        mouseAccelerationCaption: "Deaktiviert die Zeigerbeschleunigung für angeschlossene Mäuse. Die vorherige Einstellung wird beim Ausschalten oder Beenden von Vorssaint wiederhergestellt."
     )
 }

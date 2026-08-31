@@ -112,6 +112,7 @@ enum SettingsDirectory {
                                         (.focusFollowsMouse, [s.focusFollowsMouseName,
                                                               s.focusFollowsMouseDelay]),
                                         (.smoothScroll, [s.smoothScrollName]),
+                                        (.mouseAcceleration, [s.mouseAccelerationName]),
                                         (.mouseNavigation, [s.mouseNavigationEnable]),
                                         (.mouseButtonShortcuts,
                                          [FeatureStrings.mouseButtons(language).pageTitle,

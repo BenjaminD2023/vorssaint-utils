@@ -981,6 +981,8 @@ extension Strings {
         switcherScreenPlacementMenuBar: "Pantalla con la barra de menús",
         switcherScreenPlacementActiveWindow: "Pantalla con la ventana activa",
         switcherScreenPlacementCaption: "En qué pantalla se abre el selector cuando hay más de una conectada.",
-        smoothScrollResponseLabel: "Respuesta"
+        smoothScrollResponseLabel: "Respuesta",
+        mouseAccelerationName: "Desactivar la aceleración del ratón",
+        mouseAccelerationCaption: "Elimina la aceleración del puntero para los ratones conectados. El ajuste anterior vuelve al desactivarlo o salir de Vorssaint."
     )
 }

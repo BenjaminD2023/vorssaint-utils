@@ -3207,6 +3207,9 @@ struct MetricsTests {
                "shelf automatic exclusions start empty")
         expect(registeredDefaults[DefaultsKey.mouseNavigationEnabled] as? Bool == false,
                "mouse side-button navigation is opt-in")
+        expect(registeredDefaults[DefaultsKey.mouseAccelerationDisabled] as? Bool == false
+                && registeredDefaults[DefaultsKey.panelControlMouseAcceleration] as? Bool == true,
+               "mouse acceleration control is opt-in and visible in the panel when installed")
         expect(registeredDefaults[DefaultsKey.mouseClickDebounceEnabled] as? Bool == false,
                "mouse click debounce is opt-in")
         expect(registeredDefaults[DefaultsKey.mouseClickDebounceWindowMs] as? Int
@@ -12175,12 +12178,12 @@ struct MetricsTests {
 
         // MARK: Features hub catalog
 
-        expect(AppFeature.allCases.count == 55, "feature catalog has 55 features")
+        expect(AppFeature.allCases.count == 56, "feature catalog has 56 features")
         expect(Set(AppFeature.allCases.map(\.rawValue)).count == AppFeature.allCases.count,
                "feature ids are unique")
         expect(AppFeature.allCases.map(\.rawValue) == [
             "switcher", "dockPreview", "dockClick", "windowMaximizer", "windowLayout", "autoQuit",
-            "scrollInverter", "focusFollowsMouse", "smoothScroll", "mouseNavigation", "mouseButtonShortcuts", "middleClick",
+            "scrollInverter", "focusFollowsMouse", "smoothScroll", "mouseAcceleration", "mouseNavigation", "mouseButtonShortcuts", "middleClick",
             "mouseClickDebounce", "keyboardDebounce", "textSnippets", "superKey",
             "clipboardHistory", "pastePlain", "finderCutPaste", "finderRename", "shelf", "urlCleaner",
             "diskImageInstaller",
@@ -12192,6 +12195,63 @@ struct MetricsTests {
             "monitorCPU", "monitorGPU", "monitorMemory", "monitorNetwork", "monitorDisk", "monitorPower",
             "fanControl",
         ], "feature ids are stable (they persist inside availability keys)")
+        expect(MouseAccelerationSupport.validatedRegistryID(nil) == nil
+                && MouseAccelerationSupport.validatedRegistryID(0) == nil
+                && MouseAccelerationSupport.validatedRegistryID(42) == 42,
+               "mouse acceleration never turns a missing registry id into shared identity zero")
+        let mouseIdentity = MouseAccelerationDeviceIdentity(
+            vendorID: 1,
+            productID: 2,
+            locationID: 3,
+            transport: "USB",
+            physicalUniqueID: "physical",
+            serialNumber: "serial"
+        )
+        let mouseRecovery = MouseAccelerationRecoveryEntry(
+            registryID: 42,
+            identity: mouseIdentity,
+            key: MouseAccelerationSupport.mouseAccelerationKey,
+            original: MouseAccelerationStoredValue(rawValue: 45_056, isBoolean: false)
+        )
+        var mouseJournal = MouseAccelerationRecoveryJournal(bootTime: 7, entries: [])
+        mouseJournal.upsert(mouseRecovery)
+        expect(mouseJournal.entry(registryID: 42, identity: mouseIdentity) == mouseRecovery,
+               "mouse acceleration keeps one exact restorable value per live service")
+        let reusedRegistryIdentity = MouseAccelerationDeviceIdentity(
+            vendorID: 9,
+            productID: 9,
+            locationID: 9,
+            transport: "USB",
+            physicalUniqueID: nil,
+            serialNumber: nil
+        )
+        expect(mouseJournal.entry(registryID: 42, identity: reusedRegistryIdentity) == nil,
+               "a reused registry id can never receive another mouse's saved value")
+        expect(mouseIdentity.canMatchAcrossRegistryIDs,
+               "a stable physical identity can recover after a device receives a new registry id")
+        let anonymousMouseIdentity = MouseAccelerationDeviceIdentity(
+            vendorID: nil,
+            productID: nil,
+            locationID: nil,
+            transport: "USB",
+            physicalUniqueID: nil,
+            serialNumber: nil
+        )
+        expect(!anonymousMouseIdentity.canMatchAcrossRegistryIDs,
+               "an anonymous device can never inherit another registry id's saved value")
+        expect(MouseAccelerationSupport.isRestorableKey(MouseAccelerationSupport.linearScalingKey)
+                && MouseAccelerationSupport.isRestorableKey(MouseAccelerationSupport.mouseAccelerationKey)
+                && !MouseAccelerationSupport.isRestorableKey("UserKeyMapping"),
+               "mouse acceleration recovery accepts only its own HID properties")
+        expect(MouseAccelerationSupport.targetValue(
+            for: MouseAccelerationSupport.linearScalingKey,
+            originalIsBoolean: true
+        ) == MouseAccelerationStoredValue(rawValue: 1, isBoolean: true)
+            && MouseAccelerationSupport.targetValue(
+                for: MouseAccelerationSupport.mouseAccelerationKey,
+                originalIsBoolean: false
+            ) == MouseAccelerationStoredValue(rawValue: -1, isBoolean: false),
+               "mouse acceleration uses linear mode when supported and the legacy fallback otherwise")
         expect(AppFeature.switcher.availabilityKey == "featureAvailable.switcher",
                "availability key derives from the raw value")
         expect(AppFeature.availabilityDefaults.count == AppFeature.allCases.count
@@ -13294,6 +13354,7 @@ struct MetricsTests {
         }
         expect(AppFeature.monitorCPU.energyProfile == .periodic
                 && AppFeature.clipboardHistory.energyProfile == .periodic
+                && AppFeature.mouseAcceleration.energyProfile == .idle
                 && AppFeature.textSnippets.energyProfile == .inputs
                 && AppFeature.dockPreview.energyProfile == .mouse
                 && AppFeature.mouseClickDebounce.energyProfile == .mouse
@@ -13345,10 +13406,12 @@ struct MetricsTests {
         expect(pageVisible(.mouse, available: allFeatures), "mouse page shows with everything available")
         expect(pageVisible(.mouse, available: [.middleClick]),
                "one remaining mouse feature keeps the mouse page")
+        expect(pageVisible(.mouse, available: [.mouseAcceleration]),
+               "mouse acceleration alone keeps the mouse page")
         expect(pageVisible(.mouse, available: [.mouseClickDebounce]),
                "mouse click debounce alone keeps its Settings page reachable")
         expect(!pageVisible(.mouse, available: []),
-               "the mouse page hides only with all seven mouse features off")
+               "the mouse page hides only with all eight mouse features off")
         expect(!pageVisible(.energy, available: allFeatures.subtracting([.keepAwake, .brightness,
                                                                          .extraBrightness,
                                                                          .bluetoothSleep])),
@@ -17905,6 +17968,9 @@ struct MetricsTests {
                 && backupKeys.contains(DefaultsKey.mouseClickDebounceWindowMs)
                 && backupKeys.contains(DefaultsKey.panelControlMouseClickDebounce),
                "mouse click debounce preferences travel with the settings backup")
+        expect(backupKeys.contains(DefaultsKey.mouseAccelerationDisabled)
+                && backupKeys.contains(DefaultsKey.panelControlMouseAcceleration),
+               "mouse acceleration preferences travel with the settings backup")
         expect(MouseExceptionScope.allCases.allSatisfy { backupKeys.contains($0.defaultsKey) },
                "the apps each mouse feature leaves alone travel with the settings backup")
         expect(backupKeys.contains(DefaultsKey.clipboardHistoryIgnoredApps),

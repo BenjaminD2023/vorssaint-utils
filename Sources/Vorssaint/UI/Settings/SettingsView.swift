@@ -901,6 +901,7 @@ struct MouseSettings: View {
         FocusFollowsMouseSupport.defaultDelayMilliseconds
     @AppStorage(DefaultsKey.smoothScrollEnabled) private var smoothScrollEnabled = false
     @AppStorage(DefaultsKey.smoothScrollStep) private var smoothScrollStep = SmoothScrollSupport.defaultStep
+    @AppStorage(DefaultsKey.mouseAccelerationDisabled) private var mouseAccelerationDisabled = false
     @AppStorage(DefaultsKey.smoothScrollResponse) private var smoothScrollResponse =
         SmoothScrollSupport.defaultResponse
     @AppStorage(DefaultsKey.mouseNavigationEnabled) private var mouseNavigationEnabled = false
@@ -1019,6 +1020,18 @@ struct MouseSettings: View {
                     }
                 }
                 .settingsSectionAnchor(.smoothScroll)
+            }
+            if AppFeature.mouseAcceleration.isAvailable {
+                Section(l10n.s.mouseAccelerationName) {
+                    Toggle(l10n.s.mouseAccelerationName, isOn: $mouseAccelerationDisabled)
+                        .onChange(of: mouseAccelerationDisabled) { _, _ in
+                            MouseAccelerationService.shared.syncWithPreferences()
+                        }
+                    Text(l10n.s.mouseAccelerationCaption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .settingsSectionAnchor(.mouseAcceleration)
             }
             if AppFeature.mouseNavigation.isAvailable {
                 Section(l10n.s.mouseNavigationSection) {

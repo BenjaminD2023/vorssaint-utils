@@ -981,6 +981,8 @@ extension Strings {
         switcherScreenPlacementMenuBar: "Schermo con la barra dei menu",
         switcherScreenPlacementActiveWindow: "Schermo con la finestra attiva",
         switcherScreenPlacementCaption: "Su quale schermo si apre il commutatore quando ne sono collegati più di uno.",
-        smoothScrollResponseLabel: "Reattività"
+        smoothScrollResponseLabel: "Reattività",
+        mouseAccelerationName: "Disattiva l’accelerazione del mouse",
+        mouseAccelerationCaption: "Rimuove l’accelerazione del puntatore per i mouse collegati. L’impostazione precedente viene ripristinata quando disattivi l’opzione o chiudi Vorssaint."
     )
 }

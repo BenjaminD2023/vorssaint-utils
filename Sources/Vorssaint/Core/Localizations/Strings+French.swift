@@ -981,6 +981,8 @@ extension Strings {
         switcherScreenPlacementMenuBar: "Écran avec la barre des menus",
         switcherScreenPlacementActiveWindow: "Écran avec la fenêtre active",
         switcherScreenPlacementCaption: "Sur quel écran le sélecteur s'ouvre quand plusieurs sont connectés.",
-        smoothScrollResponseLabel: "Réactivité"
+        smoothScrollResponseLabel: "Réactivité",
+        mouseAccelerationName: "Désactiver l’accélération de la souris",
+        mouseAccelerationCaption: "Supprime l’accélération du pointeur pour les souris connectées. Le réglage précédent est restauré à la désactivation ou à la fermeture de Vorssaint."
     )
 }

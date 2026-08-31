@@ -982,6 +982,8 @@ extension Strings {
         switcherScreenPlacementMenuBar: "메뉴 막대가 있는 화면",
         switcherScreenPlacementActiveWindow: "활성 윈도우가 있는 화면",
         switcherScreenPlacementCaption: "화면이 두 개 이상 연결되어 있을 때 전환기를 어느 화면에 표시할지 선택합니다.",
-        smoothScrollResponseLabel: "반응 속도"
+        smoothScrollResponseLabel: "반응 속도",
+        mouseAccelerationName: "마우스 가속 끄기",
+        mouseAccelerationCaption: "연결된 마우스의 포인터 가속을 끕니다. 옵션을 끄거나 Vorssaint를 종료하면 이전 설정으로 복원됩니다."
     )
 }
