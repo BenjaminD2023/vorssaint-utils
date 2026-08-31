@@ -118,6 +118,10 @@ enum SettingsDirectory {
                                           FeatureStrings.mouseButtons(language).sideWheelLeftName,
                                           FeatureStrings.mouseButtons(language).sideWheelRightName,
                                           FeatureStrings.mouseExceptions(language).listTitle]),
+                                        (.mouseClickDebounce,
+                                         [FeatureStrings.mouseClickDebounce(language).title,
+                                          FeatureStrings.mouseClickDebounce(language).windowLabel,
+                                          "debounce"]),
                                        ]),
                 SettingsDirectoryItem(page: .switcher, title: s.tabSwitcher, icon: "rectangle.on.rectangle",
                                        featureKeywords: [

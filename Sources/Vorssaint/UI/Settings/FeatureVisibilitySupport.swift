@@ -28,6 +28,7 @@ enum SettingsSectionAnchor: String, CaseIterable, Hashable {
     case mouseNavigation
     case mouseButtonShortcuts
     case middleClick
+    case mouseClickDebounce
     case switcher
     case dock
     case dockClick
@@ -53,7 +54,7 @@ enum SettingsSectionAnchor: String, CaseIterable, Hashable {
         case .panelConfiguration, .musicBlocking: return .general
         case .keepAwake, .brightness, .extraBrightness, .bluetoothSleep: return .energy
         case .scrollDirection, .focusFollowsMouse, .smoothScroll, .mouseNavigation, .mouseButtonShortcuts,
-             .middleClick:
+             .middleClick, .mouseClickDebounce:
             return .mouse
         case .switcher, .dock, .dockClick: return .switcher
         case .finderCutPaste, .finderRename: return .cutPaste
@@ -177,6 +178,8 @@ extension AppFeature {
             return FeatureSettingsDestination(.mouse, sectionAnchor: .mouseButtonShortcuts)
         case .middleClick:
             return FeatureSettingsDestination(.mouse, sectionAnchor: .middleClick)
+        case .mouseClickDebounce:
+            return FeatureSettingsDestination(.mouse, sectionAnchor: .mouseClickDebounce)
         case .keyboardDebounce: return FeatureSettingsDestination(.keyDebounce)
         case .textSnippets: return FeatureSettingsDestination(.textSnippets)
         case .superKey: return FeatureSettingsDestination(.superKey)
@@ -261,7 +264,7 @@ enum FeatureVisibilitySupport {
         case .energy: return [.keepAwake, .brightness, .extraBrightness, .bluetoothSleep]
         case .monitor: return monitorFeatures
         case .mouse: return [.scrollInverter, .focusFollowsMouse, .smoothScroll, .mouseNavigation, .mouseButtonShortcuts,
-                             .middleClick]
+                             .middleClick, .mouseClickDebounce]
         case .switcher: return [.switcher, .dockPreview, .dockClick]
         case .windowLayout: return [.windowLayout]
         case .autoQuit: return [.autoQuit]

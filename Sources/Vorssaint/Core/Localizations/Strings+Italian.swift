@@ -155,7 +155,7 @@ extension Strings {
         mouseNavigationActiveNow: "Tasti laterali attivi ora",
         smoothScrollName: "Scorrimento fluido",
         smoothScrollCaption: "Trasforma ogni scatto della rotellina del mouse in una breve scivolata fluida. Il trackpad non cambia.",
-        smoothScrollStepLabel: "Distanza per scatto",
+        smoothScrollStepLabel: "Velocità di scorrimento",
         mouseNavigationSection: "Navigazione",
         mouseNavigationEnable: "Usa i pulsanti laterali per Indietro e Avanti",
         mouseNavigationCaption: "Trasforma i pulsanti Indietro e Avanti del mouse in comandi di navigazione per Finder, browser e app compatibili.",
@@ -980,6 +980,7 @@ extension Strings {
         switcherScreenPlacementPointer: "Schermo con il puntatore",
         switcherScreenPlacementMenuBar: "Schermo con la barra dei menu",
         switcherScreenPlacementActiveWindow: "Schermo con la finestra attiva",
-        switcherScreenPlacementCaption: "Su quale schermo si apre il commutatore quando ne sono collegati più di uno."
+        switcherScreenPlacementCaption: "Su quale schermo si apre il commutatore quando ne sono collegati più di uno.",
+        smoothScrollResponseLabel: "Reattività"
     )
 }

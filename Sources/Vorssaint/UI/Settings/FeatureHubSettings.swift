@@ -712,6 +712,8 @@ extension AppFeature {
         case .keyboardDebounce: return s.keyDebounceName
         case .textSnippets: return FeatureStrings.snippets(L10n.shared.language).pageTitle
         case .superKey: return FeatureStrings.superKey(L10n.shared.language).pageTitle
+        case .mouseClickDebounce:
+            return FeatureStrings.mouseClickDebounce(L10n.shared.language).title
         case .clipboardHistory: return FeatureStrings.clipboard(L10n.shared.language).title
         case .pastePlain: return s.pastePlainName
         case .finderCutPaste: return s.cutPasteName
@@ -772,6 +774,8 @@ extension AppFeature {
         case .keyboardDebounce: return hub.descKeyboardDebounce
         case .textSnippets: return FeatureStrings.snippets(L10n.shared.language).hubDescription
         case .superKey: return FeatureStrings.superKey(L10n.shared.language).hubDescription
+        case .mouseClickDebounce:
+            return FeatureStrings.mouseClickDebounce(L10n.shared.language).caption
         case .clipboardHistory: return hub.descClipboardHistory
         case .pastePlain: return hub.descPastePlain
         case .finderCutPaste: return hub.descFinderCutPaste

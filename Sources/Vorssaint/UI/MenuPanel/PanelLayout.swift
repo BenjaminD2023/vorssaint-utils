@@ -92,7 +92,7 @@ enum PanelSectionID: String, CaseIterable, Identifiable, Hashable {
         case .controls: return [.scrollInverter, .mouseNavigation, .mouseButtonShortcuts, .switcher,
                                 .finderCutPaste, .autoQuit,
                                 .shelf, .windowMaximizer, .dockPreview, .keyboardDebounce, .dockClick,
-                                .middleClick, .textSnippets, .superKey, .radialMenu]
+                                .middleClick, .textSnippets, .superKey, .radialMenu, .mouseClickDebounce]
         case .toggles: return [.quickToggles, .micMute]
         }
     }
