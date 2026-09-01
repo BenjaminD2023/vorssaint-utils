@@ -41,6 +41,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The Uninstaller now finds more support files, containers, preference panes and plugins through verified app identifiers and signed ownership, searches nested vendor folders and opens every result in Finder. Name-related finds start unchecked.
 - Cleaner leftover scans now cover more preference panes and plugin folders while refusing nested app data, version folders, links and other ambiguous paths.
 - Quit on close now reads an app's windows once per switch instead of repeating the same scan for every focus change, so switching between apps with many windows costs less. Thanks to @PathGao.
+- The App Switcher and window previews now check whether an app's main and focused windows are already collected before evaluating their properties, skipping redundant Accessibility calls. Thanks to @PathGao.
 
 ### Fixed
 - Dock icon window cycling now rotates only across windows on the active Space instead of switching desktops unexpectedly. Thanks to @PathGao.
