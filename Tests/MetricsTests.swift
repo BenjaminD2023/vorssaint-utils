@@ -15263,6 +15263,48 @@ struct MetricsTests {
                 && !captureEngineSource.contains(".contains(plan.bounds)"),
                "a window straddling two displays falls back to the single-window capture instead of a one-display slice")
 
+        let geometricAttachment = ScreenshotCapturePolicy.AttachedCapturePlan(
+            windowIDs: [1, 6, 2], bounds: capturedWindow.frame)
+        expect(ScreenshotCapturePolicy.confirmedAttachment(
+            geometricAttachment, confirmedIDs: nil) == geometricAttachment,
+               "missing Accessibility confirmation leaves the geometric attachment unchanged")
+        expect(ScreenshotCapturePolicy.confirmedAttachment(
+            geometricAttachment, confirmedIDs: [2])
+            == ScreenshotCapturePolicy.AttachedCapturePlan(
+                windowIDs: [1, 2], bounds: capturedWindow.frame),
+               "Accessibility confirmation keeps its matching attachment in capture order")
+        expect(ScreenshotCapturePolicy.confirmedAttachment(
+            geometricAttachment, confirmedIDs: []) == nil,
+               "Accessibility confirmation with no matching attachment drops the composite plan")
+
+        // The engine is outside the pure-helper test binary. Pin the permission
+        // gate before its AX call so window capture never starts an
+        // Accessibility round trip merely because geometry found a candidate.
+        let screenshotCaptureEngineSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/ScreenshotCaptureEngine.swift",
+            encoding: .utf8)) ?? ""
+        let captureWindowBody = (screenshotCaptureEngineSource
+            .components(separatedBy: "static func captureWindow(").last ?? "")
+            .components(separatedBy: "\n    /// On-screen windows").first ?? ""
+        let accessibilityGate = captureWindowBody.range(of: "if Permissions.shared.accessibility {")
+        let attachmentConfirmation = captureWindowBody.range(
+            of: "accessibilityAttachedWindowIDs(")
+        expect(accessibilityGate != nil && attachmentConfirmation != nil
+               && accessibilityGate!.lowerBound < attachmentConfirmation!.lowerBound,
+               "window capture checks its existing Accessibility grant before AX confirmation")
+        let accessibilityAttachedWindowIDsBody = (screenshotCaptureEngineSource
+            .components(separatedBy: "private static func accessibilityAttachedWindowIDs(").last ?? "")
+            .components(separatedBy: "\n    private static func accessibilityElements(").first ?? ""
+        let accessibilityAttachedWindowIDsCode = accessibilityAttachedWindowIDsBody
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        let unresolvedCandidatePasses = accessibilityAttachedWindowIDsCode.range(of: "guard let element = elementsByID[candidateID] else {\n                confirmed.insert(candidateID)\n                continue\n            }")
+        let standardWindowFails = accessibilityAttachedWindowIDsCode.range(of: "if let subrole = accessibilityString(element, kAXSubroleAttribute as CFString),\n               subrole == (kAXStandardWindowSubrole as String) || subrole == \"AXFullScreenWindow\" {\n                continue\n            }\n            confirmed.insert(candidateID)")
+        let childrenPassIsAbsent = !accessibilityAttachedWindowIDsCode.contains("kAXChildrenAttribute")
+        expect(unresolvedCandidatePasses != nil && standardWindowFails != nil && childrenPassIsAbsent,
+               "AX keeps unresolved candidates and excludes only identified standard windows")
+
         expect(ScreenshotSupport.sanitizedDelay(5) == 5
                 && ScreenshotSupport.sanitizedDelay(7) == 0
                 && ScreenshotSupport.sanitizedDelay(-3) == 0,
