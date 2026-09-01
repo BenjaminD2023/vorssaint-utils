@@ -13831,7 +13831,7 @@ struct MetricsTests {
                    "no em-dash in WhatsApp organizer strings (\(language.rawValue))")
             let recorderValues = Mirror(reflecting: FeatureStrings.recorder(language)).children
                 .compactMap { $0.value as? String }
-            expect(recorderValues.count == 119 && recorderValues.allSatisfy { !$0.isEmpty },
+            expect(recorderValues.count == 126 && recorderValues.allSatisfy { !$0.isEmpty },
                    "every screen recorder string is set for \(language.rawValue)")
             expect(recorderValues.allSatisfy { !$0.contains("—") },
                    "no em-dash in visible screen recorder strings (\(language.rawValue))")
@@ -20849,6 +20849,70 @@ struct MetricsTests {
         expect(RecorderTextOverlay.Anchor.bottom.unitPoint.y == 1
                 && RecorderTextOverlay.Anchor.topLeading.unitPoint == CGPoint(x: 0, y: 0),
                "the nine places mean what they say, counting down from the top")
+
+        // MARK: Screen recorder blur
+
+        let blur = RecorderBlurRegion(start: 2, end: 6,
+                                      rect: CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.1))
+        expect(blur.covers(2) && blur.covers(4) && blur.covers(6)
+                && !blur.covers(1.99) && !blur.covers(6.01),
+               "a blur hides its area on every frame of its block and never eases in or out")
+        expect(blur.pixelRect(in: CGSize(width: 1000, height: 500))
+                == CGRect(x: 100, y: 350, width: 300, height: 50),
+               "the area is counted from the top like the screen and handed over from the bottom like Core Image")
+        expect(RecorderBlurRegion(start: 1, end: 1.1).sanitized(duration: 10) == nil,
+               "a blur too short to matter is not kept")
+        expect(RecorderBlurRegion(start: 8, end: 30).sanitized(duration: 10)?.end == 10,
+               "a blur that runs past the recording is brought back inside it")
+        let spilled = RecorderBlurRegion(start: 1, end: 3,
+                                         rect: CGRect(x: -0.2, y: 0.9, width: 0.5, height: 0.5))
+            .sanitized(duration: 10)
+        expect(spilled.map { abs($0.x) < 1e-9 && abs($0.y - 0.9) < 1e-9
+                && abs($0.width - 0.3) < 1e-9 && abs($0.height - 0.1) < 1e-9 } == true,
+               "an area drawn past the edge is clamped to the picture instead of reaching outside it")
+        expect(RecorderBlurRegion(start: 1, end: 3,
+                                  rect: CGRect(x: 0.5, y: 0.5, width: 0, height: 0.2))
+                .sanitized(duration: 10) == nil,
+               "a line is not an area and is dropped rather than drawn")
+        let backwards = RecorderBlurRegion.normalizedRect(from: CGPoint(x: 0.8, y: 0.7),
+                                                          to: CGPoint(x: 0.2, y: 0.3))
+        expect(backwards.map { abs($0.minX - 0.2) < 1e-9 && abs($0.minY - 0.3) < 1e-9
+                && abs($0.width - 0.6) < 1e-9 && abs($0.height - 0.4) < 1e-9 } == true,
+               "a drag in any direction produces the same area")
+        expect(RecorderBlurRegion.normalizedRect(from: CGPoint(x: 0.5, y: 0.5),
+                                                 to: CGPoint(x: 0.502, y: 0.9)) == nil,
+               "a drag too thin to be seen leaves the blur where it was")
+        expect(RecorderBlurRegion(start: 0, end: 5).rect == RecorderBlurRegion.defaultRect,
+               "a new blur lands in the middle until its area is drawn")
+        expect(RecorderSupport.blurBlockSize(for: CGSize(width: 300, height: 24)) == 8
+                && RecorderSupport.blurBlockSize(for: CGSize(width: 600, height: 90)) == 30
+                && RecorderSupport.blurBlockSize(for: CGSize(width: 900, height: 900)) == 48,
+               "the mosaic is coarser than one line of text and never turns a big area into four squares")
+        let blurredDocument = RecorderEditDocument.decoded(
+            RecorderEditDocument(blurs: [blur]).encoded())
+        expect(blurredDocument.blurs == [blur],
+               "a blur written next to the recording comes back exactly as it was")
+        expect(RecorderEditDocument().affectsPicture(blurredDocument)
+                && !RecorderEditDocument().affectsTiming(blurredDocument)
+                && blurredDocument.isEdited(duration: 10),
+               "adding a blur redraws the preview without rebuilding the timeline, and counts as an edit")
+        expect(RecorderEditDocument(blurs: [RecorderBlurRegion(start: 4, end: 4.05)])
+                .sanitized(duration: 10).blurs.isEmpty,
+               "a damaged blur is dropped by the same repair that fixes every other field")
+
+        // The stage letterboxes the picture; a point on it has to come off
+        // the empty bands before it means anything in the recording.
+        let stagePoint = RecorderSupport.unitPoint(at: CGPoint(x: 300, y: 250),
+                                                   in: CGSize(width: 500, height: 500),
+                                                   sourceSize: CGSize(width: 1000, height: 500))
+        expect(stagePoint.map { abs($0.x - 0.6) < 1e-9 && abs($0.y - 0.5) < 1e-9 } == true,
+               "a point on the stage maps through the letterbox into the picture's own space")
+        expect(RecorderSupport.unitPoint(at: CGPoint(x: 10, y: 10),
+                                         in: CGSize(width: 500, height: 500),
+                                         sourceSize: CGSize(width: 1000, height: 500))?.y ?? 0 < 0,
+               "a point in the letterbox band comes back outside the picture rather than snapped into it")
+        expect(RecorderSupport.unitPoint(at: .zero, in: .zero, sourceSize: .zero) == nil,
+               "a stage with no size maps nothing")
 
         // MARK: Screen recorder pointer track
 
