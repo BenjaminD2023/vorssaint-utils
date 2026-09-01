@@ -42,6 +42,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - Cleaner leftover scans now cover more preference panes and plugin folders while refusing nested app data, version folders, links and other ambiguous paths.
 
 ### Fixed
+- Dock icon window cycling now rotates only across windows on the active Space instead of switching desktops unexpectedly. Thanks to @PathGao.
 - App Switcher can explicitly replace the matching macOS app and window switcher shortcuts, with crash recovery and a windowless-app fallback. Thanks to @BenjaminD2023.
 - The clipboard history and snippet search fields now yield to input method composition, allowing candidate navigation and confirmation in Chinese, Japanese and Korean. Thanks to @PathGao.
 - The Command Bar capture card now records Command Q instead of ignoring it. Thanks to @arsarsars1 and @jtprogru.
