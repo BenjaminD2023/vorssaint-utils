@@ -5134,6 +5134,23 @@ struct MetricsTests {
         }
         expect(missingWindowWatchRetryCode.isEmpty,
                "the AutoQuit window-watch retry stays bounded, origin-based, re-armed by Space changes, and counts only windows whose destroy notification registered: missing \(missingWindowWatchRetryCode)")
+        // Coalescing is only safe while the state it reads is torn down with
+        // the app: a refresh left pending for a detached app would run against
+        // an observer that is gone.
+        let refreshCoalescingCode = [
+            "guard pendingRefreshes.insert(pid).inserted else { return }",
+            "self.pendingRefreshes.remove(pid) != nil",
+            "pendingRefreshes.removeAll()",
+        ]
+        let missingRefreshCoalescingCode = refreshCoalescingCode.filter {
+            autoQuitServiceCodeLines(containing: $0).isEmpty
+        }
+        expect(missingRefreshCoalescingCode.isEmpty,
+               "AutoQuit collapses a burst of notifications into one refresh and drops it when the app goes: missing \(missingRefreshCoalescingCode)")
+        // Two lines drop the pending refresh: the deferred block's own guard
+        // and `detach`. Losing the second is the case this counts.
+        expect(autoQuitServiceCodeLines(containing: "pendingRefreshes.remove(pid)").count == 2,
+               "a pending AutoQuit refresh is dropped both when it runs and when the app is detached")
         let closeCheckOffsetCode = [
             "private static let closeCheckOffsets: [TimeInterval] = [0.35, 1.0, 2.2]",
             "for offset in Self.closeCheckOffsets",
