@@ -198,7 +198,7 @@ enum ScreenshotCaptureEngine {
             content.windows.first { $0.windowID == id }
         }
         guard windows.count == plan.windowIDs.count,
-              let display = content.displays.first(where: { $0.frame.intersects(plan.bounds) }),
+              let display = content.displays.first(where: { $0.frame.contains(plan.bounds) }),
               let screen = NSScreen.screens.first(where: { $0.displayID == display.displayID }),
               let mainScreen = NSScreen.screens.first
         else { return nil }
