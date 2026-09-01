@@ -26,26 +26,22 @@ final class ScreenCaptureSelectionOptions: ObservableObject {
 }
 
 /// One entry point for screenshot, recording, screen text and color. It owns
-/// the only general screen-capture shortcut and one shared selection surface;
-/// the established feature services still own what happens after selection.
+/// each tool's own capture shortcut and one shared selection surface; the
+/// established feature services still own what happens after selection.
 final class ScreenCaptureService: ObservableObject {
     static let shared = ScreenCaptureService()
 
-    @Published private(set) var shortcutRegistrationFailed = false
-
     /// The tools whose own shortcut could not be registered, so each tool's
-    /// settings can say so the way the general shortcut already does.
+    /// settings can say so.
     @Published private(set) var toolShortcutRegistrationFailures: Set<ScreenCaptureTool> = []
 
-    private let hotkey = QuickToolHotkey(id: 15)
-
-    /// One hotkey per tool that has a shortcut of its own, built from the tool
-    /// list so a new mode cannot be added without one. Ids continue past the
-    /// hand-assigned quick tool range, which ends at 24.
+    /// One hotkey per tool, built from the tool list so a new mode cannot be
+    /// added without one. Ids continue past the hand-assigned quick tool
+    /// range, which ends at 24.
     private let toolHotkeys: [ScreenCaptureTool: QuickToolHotkey] = {
         var next: UInt32 = 25
         var hotkeys: [ScreenCaptureTool: QuickToolHotkey] = [:]
-        for tool in ScreenCaptureTool.allCases where tool.dedicatedShortcut != nil {
+        for tool in ScreenCaptureTool.allCases {
             hotkeys[tool] = QuickToolHotkey(id: next)
             next += 1
         }
@@ -62,7 +58,6 @@ final class ScreenCaptureService: ObservableObject {
     }
 
     private init() {
-        hotkey.onPress = { [weak self] in self?.capture() }
         for (tool, hotkey) in toolHotkeys {
             hotkey.onPress = { [weak self] in self?.capture(initial: tool) }
         }
@@ -71,9 +66,7 @@ final class ScreenCaptureService: ObservableObject {
     func syncWithPreferences() {
         let availableTools = ScreenCaptureTool.available()
         guard !availableTools.isEmpty else {
-            shortcutRegistrationFailed = false
             toolShortcutRegistrationFailures = []
-            hotkey.unregister()
             toolHotkeys.values.forEach { $0.unregister() }
             cancelSelection()
             return
@@ -83,12 +76,7 @@ final class ScreenCaptureService: ObservableObject {
                                                         availableTools: availableTools) {
             cancelSelection()
         }
-        let defaults = UserDefaults.standard
-        let enabled = defaults.bool(forKey: DefaultsKey.screenshotShortcutEnabled)
-        let shortcut = GlobalShortcut.saved(for: DefaultsKey.screenshotShortcut,
-                                            fallback: .screenshotDefault)
-        shortcutRegistrationFailed = !hotkey.sync(enabled: enabled, shortcut: shortcut)
-        syncToolShortcuts(availableTools: availableTools, defaults: defaults)
+        syncToolShortcuts(availableTools: availableTools, defaults: UserDefaults.standard)
     }
 
     /// A tool's own shortcut opens the same chooser already on that mode. A
@@ -98,7 +86,7 @@ final class ScreenCaptureService: ObservableObject {
                                    defaults: UserDefaults) {
         var failures: Set<ScreenCaptureTool> = []
         for (tool, hotkey) in toolHotkeys {
-            guard let keys = tool.dedicatedShortcut else { continue }
+            let keys = tool.dedicatedShortcut
             let enabled = availableTools.contains(tool) && defaults.bool(forKey: keys.enabledKey)
             if !hotkey.sync(enabled: enabled, shortcut: keys.role.savedShortcut) {
                 failures.insert(tool)
@@ -108,7 +96,6 @@ final class ScreenCaptureService: ObservableObject {
     }
 
     func suspend() {
-        hotkey.unregister()
         toolHotkeys.values.forEach { $0.unregister() }
         cancelSelection()
     }
@@ -208,7 +195,11 @@ final class ScreenCaptureService: ObservableObject {
             purpose: FeatureStrings.screenshot(L10n.shared.language).screenCaptureTitle,
             mode: policy.usesGeometry ? .geometry : .image,
             supportsScrollingCapture: options.availableTools.contains(.screenshot),
-            screenCaptureOptions: options)
+            screenCaptureOptions: options,
+            onCapturePolicyChange: { [weak self, weak options] in
+                guard let self, let options else { return }
+                self.replaceSelection(options: options)
+            })
         selection = controller
         controller.begin { [weak self, weak controller, weak options] outcome in
             guard let self, let controller, let options,
@@ -218,16 +209,13 @@ final class ScreenCaptureService: ObservableObject {
             self.route(outcome, selected: options.selectedTool,
                        recorderAudio: options.recorderAudio)
         }
-        options.onSelectionChange = { [weak self, weak controller, weak options] in
-            guard let self, let controller, let options else { return }
-            self.replaceSelection(controller, options: options)
-        }
     }
 
-    private func replaceSelection(_ controller: ScreenshotSelectionController,
-                                  options: ScreenCaptureSelectionOptions) {
-        guard selection === controller, self.options === options else { return }
-        controller.prepareForCapturePolicyChange()
+    /// Rebuilds only when the newly selected tool needs different source
+    /// pixels or window policy. Tools with the same policy keep switching in
+    /// place, preserving the flicker-free chooser.
+    private func replaceSelection(options: ScreenCaptureSelectionOptions) {
+        guard let controller = selection, self.options === options else { return }
         selection = nil
         controller.cancel()
         DispatchQueue.main.async { [weak self, weak options] in

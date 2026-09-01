@@ -10,6 +10,22 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# The icon catalog and the bundle are staged in temp dirs; sweep both however
+# the script ends.
+ICON_TMP=""
+STAGE_TMP=""
+
+cleanup() {
+    [[ -n "$ICON_TMP" ]] && rm -rf "$ICON_TMP"
+    [[ -n "$STAGE_TMP" ]] && rm -rf "$STAGE_TMP"
+    return 0
+}
+trap cleanup EXIT
+# zsh runs the EXIT trap when the script is hung up, but not when it is
+# interrupted or terminated; route those through exit so a Ctrl-C partway
+# into the build sweeps like any other ending.
+trap 'exit 1' INT TERM HUP
+
 # Flags: --dev builds the local-only "Vorssaint (Developer)" variant (its own
 # bundle id, so it coexists with the official app); --install puts it in /Applications.
 DEV=0
@@ -49,6 +65,24 @@ developer_id_identity() {
         | head -1 \
         | sed -E 's/.*"(.*)".*/\1/' || true
 }
+
+# The Developer build exists for iterative local work, where an ad-hoc
+# signature is a trap: macOS ties Accessibility and Screen Recording grants to
+# the exact binary hash, so every rebuild orphans them while System Settings
+# keeps showing them as granted, and no new prompt ever appears. When no
+# identity is installed, create the stable local one up front instead of
+# falling through to ad-hoc — setup-signing.sh is free, offline and idempotent.
+if (( DEV )) && [[ -z "$(developer_id_identity)" ]] \
+    && ! security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    echo "▸ No signing identity installed; creating the stable local one…"
+    if ! ./Tools/setup-signing.sh; then
+        echo "  ⚠ Tools/setup-signing.sh failed; signing ad-hoc instead." >&2
+        echo "    Accessibility and Screen Recording grants will not survive rebuilds:" >&2
+        echo "    System Settings will show them as granted while the app is not trusted." >&2
+        echo "    After fixing the identity, clear the stale grant once with:" >&2
+        echo "      tccutil reset Accessibility $APP_BUNDLE_ID" >&2
+    fi
+fi
 
 codesign_with_timestamp_retry() {
     local attempt
@@ -137,10 +171,34 @@ else
 fi
 SDK_COMPAT_FLAGS=()
 VM_STATISTICS_COMPAT_FLAGS=(-I Sources/VMStatisticsCompat)
+HID_EVENT_SYSTEM_FLAGS=(-I Sources/HIDEventSystem)
 if [[ "$SDK" == "$PINNED_SDK" ]]; then
     # Swift 6.4 can read the SDK 26 interfaces when given their compiler version.
     SDK_COMPAT_FLAGS=(-Xfrontend -interface-compiler-version -Xfrontend 6.3.2)
 fi
+
+# The defaults migrations under test need a real UserDefaults suite, and every
+# suite leaves an empty plist in ~/Library/Preferences. The tests already clear
+# the domains, but cfprefsd writes the emptied file back out around the time the
+# process that owned it exits, so only a caller that outlives the run can remove
+# them. `MetricsTests` keeps every suite name inside these two namespaces (a
+# check in the test file holds it to that), which is what makes this sweep
+# complete rather than a list to keep in step by hand.
+discard_test_preferences() {
+    local preferences="$HOME/Library/Preferences" name
+    for name in "vorss.tests." "com.vorssaint.tests."; do
+        rm -f "$preferences"/$name*.plist(N)
+    done
+    rm -f "$preferences/metrics-tests.plist"
+    local survivors
+    survivors=$(find "$preferences" -maxdepth 1 \
+        \( -name "vorss.tests.*.plist" -o -name "com.vorssaint.tests.*.plist" \
+           -o -name "metrics-tests.plist" \) 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$survivors" != "0" ]]; then
+        echo "✗ the test run left $survivors preference file(s) in $preferences" >&2
+        return 1
+    fi
+}
 
 # --test: compile and run the standalone unit tests (pure helpers only: metrics,
 # Homebrew parsing, defaults, localization contracts; no app, no UI, no IOKit),
@@ -155,6 +213,8 @@ if (( TEST )); then
     swiftc -Onone -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" \
         "${VM_STATISTICS_COMPAT_FLAGS[@]}" \
         Sources/Vorssaint/Services/Media/MediaSupport.swift \
+        Sources/Vorssaint/Core/QuitProtectionSupport.swift \
+        Sources/Vorssaint/Core/QuitProtectionStrings.swift \
         Sources/Vorssaint/Core/Defaults.swift \
         Sources/Vorssaint/Core/FeatureCatalog.swift \
         Sources/Vorssaint/Core/FeaturePresets.swift \
@@ -242,11 +302,16 @@ if (( TEST )); then
         Sources/Vorssaint/Services/MiddleClick/MiddleClickSupport.swift \
         Sources/Vorssaint/Services/MouseNavigation/MouseNavigationSupport.swift \
         Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutSupport.swift \
+        Sources/Vorssaint/Services/MouseButtons/MouseSpacesGestureSupport.swift \
+        Sources/Vorssaint/Services/MouseClickDebounce/MouseClickDebounceSupport.swift \
         Sources/Vorssaint/Services/MouseExceptions/MouseAppExceptionSupport.swift \
+        Sources/Vorssaint/Services/WindowServerSupport.swift \
         Sources/Vorssaint/Core/MouseButtonStrings.swift \
+        Sources/Vorssaint/Core/MouseClickDebounceStrings.swift \
         Sources/Vorssaint/Core/MouseExceptionStrings.swift \
         Sources/Vorssaint/Core/ClipboardIgnoredAppsStrings.swift \
         Sources/Vorssaint/Core/WindowPreviewExclusionStrings.swift \
+        Sources/Vorssaint/Core/DiskExclusionStrings.swift \
         Sources/Vorssaint/Core/SwitcherAppRulesStrings.swift \
         Sources/Vorssaint/Services/QuickTools/QuickToolsSupport.swift \
         Sources/Vorssaint/Services/CommandBar/CommandBarSupport.swift \
@@ -269,9 +334,13 @@ if (( TEST )); then
         Sources/Vorssaint/Services/QuickTools/WindowActivationPolicy.swift \
         Sources/Vorssaint/Services/KeyboardDebounce/KeyboardDebounceSupport.swift \
         Sources/Vorssaint/Services/SuperKey/SuperKeySupport.swift \
+        Sources/Vorssaint/Services/SuperKey/SuperKeyMappingGuard.swift \
         Sources/Vorssaint/Core/SuperKeyStrings.swift \
+        Sources/Vorssaint/Services/SessionActivity.swift \
+        Sources/Vorssaint/Services/SessionActivitySupport.swift \
         Sources/Vorssaint/Services/ScrollWheelSupport.swift \
         Sources/Vorssaint/Services/SmoothScrollSupport.swift \
+        Sources/Vorssaint/Services/MouseAcceleration/MouseAccelerationSupport.swift \
         Sources/Vorssaint/Services/FocusFollowsMouse/FocusFollowsMouseSupport.swift \
         Sources/Vorssaint/Services/Switcher/SwitcherModels.swift \
         Sources/Vorssaint/Services/Switcher/SwitcherSupport.swift \
@@ -283,6 +352,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/SudoersSupport.swift \
         Sources/Vorssaint/Services/Metrics/BatteryTimeSupport.swift \
         Sources/Vorssaint/Services/BoundedProcessRunner.swift \
+        Sources/Vorssaint/Services/DetachedProcess.swift \
         Sources/Vorssaint/Services/ShellSupport.swift \
         Sources/Vorssaint/Services/Metrics/NetworkProcessSupport.swift \
         Sources/Vorssaint/Services/Metrics/NetworkSampler.swift \
@@ -305,8 +375,11 @@ if (( TEST )); then
         Sources/Vorssaint/Services/ManagedDownloads/WhatsAppDownloadSupport.swift \
         Tests/MetricsTests.swift \
         -o build/metrics-tests
-    ./build/metrics-tests
-    exit $?
+    # `set -e` would end the script on a failing run before the sweep below.
+    test_status=0
+    ./build/metrics-tests || test_status=$?
+    discard_test_preferences || test_status=1
+    exit $test_status
 fi
 
 echo "▸ Compiling ($BUILD_CONFIGURATION) against $(basename "$SDK")…"
@@ -318,14 +391,14 @@ if (( DEV )); then
     write_swift_output_file_map "$APP_OUTPUT_FILE_MAP" "$APP_OBJECT_DIR" "${APP_SOURCES[@]}"
     swiftc "${APP_OPTIMIZATION_FLAGS[@]}" -incremental -j "$(sysctl -n hw.logicalcpu)" \
         -output-file-map "$APP_OUTPUT_FILE_MAP" \
-        -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" \
+        -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" \
         "${BUILD_VARIANT_FLAGS[@]}" \
         "${APP_SOURCES[@]}" -o "build/$EXECUTABLE"
 else
     rm -rf build
     mkdir -p build
     swiftc "${APP_OPTIMIZATION_FLAGS[@]}" -target "$TARGET" -sdk "$SDK" \
-        "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${BUILD_VARIANT_FLAGS[@]}" \
+        "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" "${BUILD_VARIANT_FLAGS[@]}" \
         "${APP_SOURCES[@]}" -o "build/$EXECUTABLE"
 fi
 
@@ -372,10 +445,9 @@ if [[ -n "$ADAPTIVE_SKIP" ]]; then
     cp "$ICON_TMP/actool.log" build/actool-failure.log 2>/dev/null || true
     echo "  adaptive icon skipped: $ADAPTIVE_SKIP (Dock falls back to AppIcon.icns)"
 fi
-rm -rf "$ICON_TMP"
-
 echo "▸ Assembling and signing bundle…"
-STAGE="$(mktemp -d)/$APP_NAME.app"
+STAGE_TMP="$(mktemp -d)"
+STAGE="$STAGE_TMP/$APP_NAME.app"
 mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources" \
     "$STAGE/Contents/Library/LaunchDaemons" "$STAGE/Contents/Library/LaunchServices"
 cp "build/$EXECUTABLE" "$STAGE/Contents/MacOS/$EXECUTABLE"
