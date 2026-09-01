@@ -44,6 +44,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The App Switcher and window previews now check whether an app's main and focused windows are already collected before evaluating their properties, skipping redundant Accessibility calls. Thanks to @PathGao.
 
 ### Fixed
+- Super key now keeps modifiers active while holding non-autorepeating source keys such as Caps Lock remapped to F18. Thanks to @victoraraujo01.
 - Dock icon window cycling now rotates only across windows on the active Space instead of switching desktops unexpectedly. Thanks to @PathGao.
 - App Switcher can explicitly replace the matching macOS app and window switcher shortcuts, with crash recovery and a windowless-app fallback. Thanks to @BenjaminD2023.
 - The clipboard history and snippet search fields now yield to input method composition, allowing candidate navigation and confirmation in Chinese, Japanese and Korean. Thanks to @PathGao.
