@@ -46,6 +46,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - Ending a process tree now reads the running process list once instead of looking up children process by process, so trees with many helpers close without the list stalling. Thanks to @PathGao.
 - The downloads organizer now confirms whether a file is staying on the same disk before filing it, and skips the second integrity read when the move is only a rename, so large videos are filed without being read twice. Thanks to @PathGao.
 - Cleaning now checks which apps are still installed once per run instead of once per leftover, and skips that check entirely when no leftover is selected, so a clean starts without scanning the application folders. Thanks to @PathGao.
+- GPU usage sampling no longer leaves a system resource behind on Macs with more than one graphics processor, and extra brightness now does less work on each refresh. Thanks to @PathGao.
 
 ### Fixed
 - Super key now keeps modifiers active while holding non-autorepeating source keys such as Caps Lock remapped to F18. Thanks to @victoraraujo01.
