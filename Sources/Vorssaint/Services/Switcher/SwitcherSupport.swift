@@ -45,11 +45,12 @@ enum SwitcherPendingKeyDecision: Equatable {
     case cancelAndSwallow
 }
 
-/// WindowServer identifiers for the app switcher and next-window actions.
+/// WindowServer identifiers for the app and window switcher actions.
 enum SwitcherNativeSymbolicHotKey: Int32, CaseIterable, Hashable {
     case commandTab = 1
     case commandShiftTab = 2
     case nextWindow = 27
+    case previousWindow = 28
 }
 
 struct SwitcherNativeHotkeyTransition: Equatable {
@@ -73,7 +74,7 @@ enum SwitcherWindowlessApps: String, CaseIterable, Equatable {
     /// Preferences are stored as plain strings, so an unknown or missing value
     /// resolves to the behavior the app shipped with instead of nothing.
     static func mode(storedValue: String?,
-                     takeOverSystemShortcuts: Bool = false) -> SwitcherWindowlessApps {
+                     takeOverSystemShortcuts: Bool) -> SwitcherWindowlessApps {
         if takeOverSystemShortcuts { return .all }
         guard let storedValue, let mode = SwitcherWindowlessApps(rawValue: storedValue) else {
             return fallback
@@ -1164,9 +1165,8 @@ enum SwitcherSupport {
     }
 
     /// Mirrors the event tap's `allowingExtraShift` match: Shift reverses a
-    /// shortcut that does not already require it. WindowServer has one
-    /// next-window action (id 27), so switching that action off covers both
-    /// ⌘` and its Shift-reversed direction.
+    /// shortcut that does not already require it, and WindowServer registers
+    /// the forward and reverse directions as separate symbolic hotkeys.
     private static func switcherShortcut(_ shortcut: GlobalShortcut,
                                          owns nativeShortcut: GlobalShortcut) -> Bool {
         guard shortcut.keyCode == nativeShortcut.keyCode else { return false }

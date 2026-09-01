@@ -2817,13 +2817,19 @@ struct MetricsTests {
                "a window touching no display, an entry without a frame, or no display at all leave the screen to the fallback")
 
         // MARK: Switcher entries for apps with no window (issue #351)
-        expect(SwitcherWindowlessApps.mode(storedValue: nil) == .finder
-               && SwitcherWindowlessApps.mode(storedValue: "") == .finder
-               && SwitcherWindowlessApps.mode(storedValue: "bogus") == .finder,
+        expect(SwitcherWindowlessApps.mode(storedValue: nil,
+                                           takeOverSystemShortcuts: false) == .finder
+               && SwitcherWindowlessApps.mode(storedValue: "",
+                                              takeOverSystemShortcuts: false) == .finder
+               && SwitcherWindowlessApps.mode(storedValue: "bogus",
+                                              takeOverSystemShortcuts: false) == .finder,
                "an unset or unreadable windowless apps choice falls back to what the app shipped with")
-        expect(SwitcherWindowlessApps.mode(storedValue: "off") == .off
-               && SwitcherWindowlessApps.mode(storedValue: "finder") == .finder
-               && SwitcherWindowlessApps.mode(storedValue: "all") == .all,
+        expect(SwitcherWindowlessApps.mode(storedValue: "off",
+                                           takeOverSystemShortcuts: false) == .off
+               && SwitcherWindowlessApps.mode(storedValue: "finder",
+                                              takeOverSystemShortcuts: false) == .finder
+               && SwitcherWindowlessApps.mode(storedValue: "all",
+                                              takeOverSystemShortcuts: false) == .all,
                "every windowless apps choice survives a round trip through preferences")
         expect(SwitcherWindowlessApps.mode(storedValue: "off",
                                            takeOverSystemShortcuts: true) == .all,
@@ -10928,6 +10934,8 @@ struct MetricsTests {
             .commandShiftTab: GlobalShortcut(keyCode: Int64(kVK_Tab),
                                              modifiers: [.command, .shift]),
             .nextWindow: .switcherWindowDefault,
+            .previousWindow: GlobalShortcut(keyCode: Int64(kVK_ANSI_Grave),
+                                            modifiers: [.command, .shift]),
         ]
         expect(SwitcherSupport.nativeHotkeysToSuppress(
                     takeOverSystemShortcuts: false,
@@ -10941,7 +10949,7 @@ struct MetricsTests {
                     windowShortcut: .switcherWindowDefault,
                     nativeShortcuts: nativeSwitcherShortcuts)
                == Set(SwitcherNativeSymbolicHotKey.allCases),
-               "opt-in covers both app directions and the Shift-reversible window action")
+               "opt-in covers both app and window switcher directions")
         expect(SwitcherSupport.nativeHotkeysToSuppress(
                     takeOverSystemShortcuts: true,
                     appsShortcut: GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.option]),
@@ -10971,12 +10979,6 @@ struct MetricsTests {
                == SwitcherNativeHotkeyTransition(suppress: [],
                                                  restore: Set(SwitcherNativeSymbolicHotKey.allCases)),
                "native takeover leaves pre-disabled keys alone and restores only owned keys")
-        expect(SwitcherSupport.nativeHotkeyTransition(
-                    from: [.commandTab],
-                    to: [.commandTab],
-                    currentlyEnabled: [.commandTab])
-               == SwitcherNativeHotkeyTransition(suppress: [.commandTab], restore: []),
-               "the watchdog suppresses an owned hotkey if another process re-enables it")
         expect(SwitcherSupport.isCurrentActivationGeneration(12, current: 12)
                && !SwitcherSupport.isCurrentActivationGeneration(11, current: 12),
                "App Switcher ignores retries left by an older activation")

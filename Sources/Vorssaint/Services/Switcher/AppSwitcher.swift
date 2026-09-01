@@ -94,7 +94,6 @@ final class AppSwitcher: ObservableObject {
     private var keyboardLayoutObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var wakeRetry: DispatchWorkItem?
-    private var takeoverWatchdog: Timer?
 
     /// The little state the tap thread needs to route an event without
     /// touching the main thread; mutated only under `routeLock`.
@@ -159,6 +158,13 @@ final class AppSwitcher: ObservableObject {
     }
 
     private init() {}
+
+    private var isTapLive: Bool {
+        lifecycleLock.withLock {
+            guard let tap else { return false }
+            return CFMachPortIsValid(tap) && CGEvent.tapIsEnabled(tap: tap)
+        }
+    }
 
     /// Applies the persisted preference; safe to call repeatedly.
     func syncWithPreferences() {
@@ -264,7 +270,6 @@ final class AppSwitcher: ObservableObject {
         wakeObserver = nil
         wakeRetry?.cancel()
         wakeRetry = nil
-        stopTakeoverWatchdog()
     }
 
     private func recoverTapAfterWake() {
@@ -284,12 +289,7 @@ final class AppSwitcher: ObservableObject {
             restoreNativeHotkeys()
             return
         }
-        let needsRecovery = lifecycleLock.withLock {
-            guard !shouldStopTapThread else { return false }
-            guard let tap else { return true }
-            return !CFMachPortIsValid(tap) || !CGEvent.tapIsEnabled(tap: tap)
-        }
-        if needsRecovery {
+        if !isTapLive {
             restoreNativeHotkeys()
             removeTap()
             installTap()
@@ -419,37 +419,16 @@ final class AppSwitcher: ObservableObject {
                 windowShortcut: windows,
                 nativeShortcuts: SwitcherNativeHotkeys.configuredShortcuts())
         )
-        if takeOver { startTakeoverWatchdog() }
-        else { stopTakeoverWatchdog() }
     }
 
     private func applyNativeHotkeySuppressionIfTapLive() {
-        let tapLive = lifecycleLock.withLock {
-            guard let tap, !shouldStopTapThread else { return false }
-            return CFMachPortIsValid(tap) && CGEvent.tapIsEnabled(tap: tap)
-        }
         let canStart = routeLock.withLock { routeCanStartSession }
-        guard tapLive, canStart else { return }
+        guard isTapLive, canStart else { return }
         applyNativeHotkeySuppression()
     }
 
     private func restoreNativeHotkeys() {
-        stopTakeoverWatchdog()
         SwitcherNativeHotkeys.apply([])
-    }
-
-    private func startTakeoverWatchdog() {
-        guard takeoverWatchdog == nil else { return }
-        let watchdog = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            self?.reconcileTakeover()
-        }
-        RunLoop.main.add(watchdog, forMode: .common)
-        takeoverWatchdog = watchdog
-    }
-
-    private func stopTakeoverWatchdog() {
-        takeoverWatchdog?.invalidate()
-        takeoverWatchdog = nil
     }
 
     private func clearEventTapThread() -> Bool {
