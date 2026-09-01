@@ -42,6 +42,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - Cleaner leftover scans now cover more preference panes and plugin folders while refusing nested app data, version folders, links and other ambiguous paths.
 
 ### Fixed
+- App Switcher can explicitly replace the matching macOS app and window switcher shortcuts, with crash recovery and a windowless-app fallback.
 - The clipboard history and snippet search fields now yield to input method composition, allowing candidate navigation and confirmation in Chinese, Japanese and Korean. Thanks to @PathGao.
 - The Command Bar capture card now records Command Q instead of ignoring it. Thanks to @arsarsars1 and @jtprogru.
 - Volume Mixer now attributes helper audio processes whose system responsibility report is detached to their parent app, ensuring browsers and sandboxed communication apps are controllable.

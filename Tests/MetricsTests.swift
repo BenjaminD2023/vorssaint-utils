@@ -2756,6 +2756,13 @@ struct MetricsTests {
                "per-app switcher rules start empty, so existing choices stay unchanged")
         expect(registeredDefaults[DefaultsKey.switcherCurrentSpaceOnly] as? Bool == false,
                "the switcher keeps showing every desktop unless the user opts out (issue #337)")
+        expect(registeredDefaults[DefaultsKey.switcherTakeOverSystemShortcuts] as? Bool == false
+               && SettingsBackupSupport.exportKeys().contains(
+                    DefaultsKey.switcherTakeOverSystemShortcuts)
+               && registeredDefaults[DefaultsKey.switcherNativeHotkeysSuppressed] == nil
+               && !SettingsBackupSupport.exportKeys().contains(
+                    DefaultsKey.switcherNativeHotkeysSuppressed),
+               "native shortcut takeover is opt-in while its crash marker stays on this Mac")
         expect(registeredDefaults[DefaultsKey.switcherSearchPinEnabled] as? Bool == false
                && SettingsBackupSupport.exportKeys().contains(DefaultsKey.switcherSearchPinEnabled),
                "the optional pinned search starts off and travels with the user's settings backup")
@@ -2810,14 +2817,23 @@ struct MetricsTests {
                "a window touching no display, an entry without a frame, or no display at all leave the screen to the fallback")
 
         // MARK: Switcher entries for apps with no window (issue #351)
-        expect(SwitcherWindowlessApps.mode(storedValue: nil) == .finder
-               && SwitcherWindowlessApps.mode(storedValue: "") == .finder
-               && SwitcherWindowlessApps.mode(storedValue: "bogus") == .finder,
+        expect(SwitcherWindowlessApps.mode(storedValue: nil,
+                                           takeOverSystemShortcuts: false) == .finder
+               && SwitcherWindowlessApps.mode(storedValue: "",
+                                              takeOverSystemShortcuts: false) == .finder
+               && SwitcherWindowlessApps.mode(storedValue: "bogus",
+                                              takeOverSystemShortcuts: false) == .finder,
                "an unset or unreadable windowless apps choice falls back to what the app shipped with")
-        expect(SwitcherWindowlessApps.mode(storedValue: "off") == .off
-               && SwitcherWindowlessApps.mode(storedValue: "finder") == .finder
-               && SwitcherWindowlessApps.mode(storedValue: "all") == .all,
+        expect(SwitcherWindowlessApps.mode(storedValue: "off",
+                                           takeOverSystemShortcuts: false) == .off
+               && SwitcherWindowlessApps.mode(storedValue: "finder",
+                                              takeOverSystemShortcuts: false) == .finder
+               && SwitcherWindowlessApps.mode(storedValue: "all",
+                                              takeOverSystemShortcuts: false) == .all,
                "every windowless apps choice survives a round trip through preferences")
+        expect(SwitcherWindowlessApps.mode(storedValue: "off",
+                                           takeOverSystemShortcuts: true) == .all,
+               "native shortcut takeover keeps every running app reachable")
         expect(SwitcherWindowlessApps.migrated(showsWindowlessFinder: true) == .finder
                && SwitcherWindowlessApps.migrated(showsWindowlessFinder: false) == .off,
                "the old windowless Finder toggle maps onto the choice that keeps its behavior")
@@ -10913,6 +10929,56 @@ struct MetricsTests {
                                                       commitWhenReady: false,
                                                       matchesShortcut: false) == .handleActiveSession,
                "App Switcher still routes repeated shortcuts and keys from a session that just became active")
+        let nativeSwitcherShortcuts: [SwitcherNativeSymbolicHotKey: GlobalShortcut] = [
+            .commandTab: .switcherDefault,
+            .commandShiftTab: GlobalShortcut(keyCode: Int64(kVK_Tab),
+                                             modifiers: [.command, .shift]),
+            .nextWindow: .switcherWindowDefault,
+            .previousWindow: GlobalShortcut(keyCode: Int64(kVK_ANSI_Grave),
+                                            modifiers: [.command, .shift]),
+        ]
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    takeOverSystemShortcuts: false,
+                    appsShortcut: .switcherDefault,
+                    windowShortcut: .switcherWindowDefault,
+                    nativeShortcuts: nativeSwitcherShortcuts).isEmpty,
+               "the App Switcher never changes macOS shortcuts without explicit opt-in")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    takeOverSystemShortcuts: true,
+                    appsShortcut: .switcherDefault,
+                    windowShortcut: .switcherWindowDefault,
+                    nativeShortcuts: nativeSwitcherShortcuts)
+               == Set(SwitcherNativeSymbolicHotKey.allCases),
+               "opt-in covers both app and window switcher directions")
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    takeOverSystemShortcuts: true,
+                    appsShortcut: GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.option]),
+                    windowShortcut: GlobalShortcut(keyCode: Int64(kVK_ANSI_Grave), modifiers: [.option]),
+                    nativeShortcuts: nativeSwitcherShortcuts).isEmpty,
+               "non-colliding shortcuts leave the macOS switchers in place")
+        let remappedNativeShortcuts = nativeSwitcherShortcuts.mapValues {
+            GlobalShortcut(keyCode: $0.keyCode,
+                           modifiers: $0.modifiers.subtracting(.command).union(.option))
+        }
+        expect(SwitcherSupport.nativeHotkeysToSuppress(
+                    takeOverSystemShortcuts: true,
+                    appsShortcut: GlobalShortcut(keyCode: Int64(kVK_Tab), modifiers: [.option]),
+                    windowShortcut: GlobalShortcut(keyCode: Int64(kVK_ANSI_Grave), modifiers: [.option]),
+                    nativeShortcuts: remappedNativeShortcuts)
+               == Set(SwitcherNativeSymbolicHotKey.allCases),
+               "takeover follows the current macOS shortcut mappings instead of hardcoded keys")
+        expect(SwitcherSupport.nativeHotkeyTransition(
+                    from: [],
+                    to: Set(SwitcherNativeSymbolicHotKey.allCases),
+                    currentlyEnabled: [.commandTab])
+               == SwitcherNativeHotkeyTransition(suppress: [.commandTab], restore: [])
+               && SwitcherSupport.nativeHotkeyTransition(
+                    from: Set(SwitcherNativeSymbolicHotKey.allCases),
+                    to: [],
+                    currentlyEnabled: [])
+               == SwitcherNativeHotkeyTransition(suppress: [],
+                                                 restore: Set(SwitcherNativeSymbolicHotKey.allCases)),
+               "native takeover leaves pre-disabled keys alone and restores only owned keys")
         expect(SwitcherSupport.isCurrentActivationGeneration(12, current: 12)
                && !SwitcherSupport.isCurrentActivationGeneration(11, current: 12),
                "App Switcher ignores retries left by an older activation")
