@@ -22287,6 +22287,24 @@ struct MetricsTests {
             expect(false,
                    "the confirmation HUD's show() fills the labels, measures them and resizes")
         }
+        // MARK: A dropped identifier
+        expect(QuickTogglesSupport.isExcluded(volumeName: "SD Card",
+                                              volumeUUID: "1234-5678-ABCD",
+                                              mountPath: "/Volumes/SD Card",
+                                              excludedVolumes: ["1234-5678-abcd"])
+                && !QuickTogglesSupport.isExcluded(volumeName: "SD Card",
+                                                   volumeUUID: nil,
+                                                   mountPath: "/Volumes/SD Card",
+                                                   excludedVolumes: ["1234-5678-abcd"]),
+               "an excluded volume UUID is honoured only when the caller hands the UUID over")
+        let diskExclusionsListCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/UI/Settings/DiskExclusionsList.swift",
+            encoding: .utf8)) ?? "").components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        expect(diskExclusionsListCode.contains(".volumeUUIDStringKey")
+                && diskExclusionsListCode.contains("QuickTogglesSupport.isExcluded("),
+               "the exclusions picker asks the shared exclusion test, UUID included, not a name-only one")
 
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
