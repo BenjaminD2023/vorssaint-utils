@@ -774,11 +774,23 @@ struct MetricsTests {
                "battery time formats hours and minutes")
         expect(BatteryTimeSupport.formatted(seconds: 30) == "0h 1m",
                "battery time keeps a positive final minute visible")
-        expect(MetricFormat.batteryIsCharging(reported: false, amperageMilliamps: 1)
-                && !MetricFormat.batteryIsCharging(reported: true, amperageMilliamps: 0)
-                && MetricFormat.batteryIsCharging(reported: true, amperageMilliamps: nil)
-                && !MetricFormat.batteryIsCharging(reported: false, amperageMilliamps: -1),
-               "battery current overrides a lagging charging flag and falls back when unavailable")
+        expect(MetricFormat.batteryIsCharging(systemReported: true,
+                                              registryReported: false,
+                                              amperageMilliamps: 0,
+                                              externalConnected: true)
+                && !MetricFormat.batteryIsCharging(systemReported: false,
+                                                   registryReported: true,
+                                                   amperageMilliamps: 1,
+                                                   externalConnected: true)
+                && MetricFormat.batteryIsCharging(systemReported: nil,
+                                                  registryReported: false,
+                                                  amperageMilliamps: 1,
+                                                  externalConnected: true)
+                && !MetricFormat.batteryIsCharging(systemReported: true,
+                                                   registryReported: true,
+                                                   amperageMilliamps: 1,
+                                                   externalConnected: false),
+               "the system charging flag wins while disconnect always clears charging")
 
         expect(MetricFormat.systemPowerWatts(measured: 3,
                                              batteryWatts: 10,
