@@ -106,7 +106,7 @@ private final class ChargeControlController {
     func connectionClosed(_ id: UUID) {
         queue.async {
             self.connectionCount = max(0, self.connectionCount - 1)
-            if self.owner == id, self.gate == .forceDischarge {
+            if self.owner == id, self.gate != .allowCharging {
                 _ = self.performRestore()
             }
             self.scheduleExitIfIdle()
@@ -176,22 +176,14 @@ private final class ChargeControlController {
             return .failure(.controlFailed, snapshot: currentSnapshot())
         }
         guard hardware.apply(gate: request.gate, limit: cap) else {
-            _ = hardware.restoreNormal()
-            _ = ownership.removeMarker()
-            ownership.release()
-            gate = .allowCharging
-            owner = nil
+            _ = performRestore()
             return .failure(.controlFailed, snapshot: currentSnapshot())
         }
 
         owner = id
         gate = request.gate
         lastHeartbeatUptime = ProcessInfo.processInfo.systemUptime
-        if request.gate == .forceDischarge {
-            startWatchdog()
-        } else {
-            stopWatchdogIfIdle()
-        }
+        startWatchdog()
         log.notice("Charge gate \(request.gate.rawValue, privacy: .public)")
         return .success(currentSnapshot())
     }
@@ -251,9 +243,9 @@ private final class ChargeControlController {
             stopWatchdogIfIdle()
             return
         }
-        if gate == .forceDischarge {
+        if gate != .allowCharging {
             let age = max(0, ProcessInfo.processInfo.systemUptime - lastHeartbeatUptime)
-            if ChargeControlPolicy.restoreReason(isDischarging: true, heartbeatAge: age) {
+            if ChargeControlPolicy.restoreReason(hasActiveGate: true, heartbeatAge: age) {
                 _ = performRestore()
                 return
             }
@@ -264,7 +256,7 @@ private final class ChargeControlController {
     }
 
     private func stopWatchdogIfIdle() {
-        guard gate != .forceDischarge, !ownership.markerExists() else { return }
+        guard gate == .allowCharging, !ownership.markerExists() else { return }
         timer?.cancel()
         timer = nil
     }

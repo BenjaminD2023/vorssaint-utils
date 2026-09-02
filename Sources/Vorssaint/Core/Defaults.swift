@@ -1114,7 +1114,7 @@ enum Defaults {
         DefaultsKey.fanControlRecoveryNeeded: false,
         DefaultsKey.fanControlHelperVersion: "",
         DefaultsKey.chargeLimitEnabled: true,
-        DefaultsKey.chargeLimitPercent: 80,
+        DefaultsKey.chargeLimitPercent: ChargeControlPolicy.defaultLimit,
         DefaultsKey.chargeSailingEnabled: false,
         DefaultsKey.chargeSailingRangePercent: 5,
         DefaultsKey.panelShowChargeControl: true,

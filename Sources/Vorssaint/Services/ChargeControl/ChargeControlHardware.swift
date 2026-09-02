@@ -117,11 +117,11 @@ final class ChargeControlHardware {
 
     private func writeAll(_ pairs: [(key: SMCClient.Key, bytes: [UInt8])]) -> Bool {
         guard !pairs.isEmpty else { return true }
-        var anySucceeded = false
+        var allSucceeded = true
         for pair in pairs {
-            if write(pair.key, bytes: pair.bytes) { anySucceeded = true }
+            if !write(pair.key, bytes: pair.bytes) { allSucceeded = false }
         }
-        return anySucceeded
+        return allSucceeded
     }
 
     private func write(_ key: SMCClient.Key, bytes: [UInt8], attempts: Int = 3) -> Bool {
@@ -130,7 +130,6 @@ final class ChargeControlHardware {
             do {
                 try client.writeBytes(payload, to: key)
                 if client.readBytes(key) == payload { return true }
-                if attempt == attempts - 1 { return true }
             } catch {
                 if attempt + 1 == attempts { return false }
             }

@@ -242,9 +242,9 @@ enum ChargeControlPolicy {
         return max(0, holdDuration - now.timeIntervalSince(started))
     }
 
-    static func restoreReason(isDischarging: Bool,
+    static func restoreReason(hasActiveGate: Bool,
                               heartbeatAge: TimeInterval) -> Bool {
-        isDischarging && heartbeatAge > heartbeatLimit
+        hasActiveGate && heartbeatAge > heartbeatLimit
     }
 
     /// Fit a write to the key's reported size. M-series firmware uses 1-byte

@@ -272,14 +272,14 @@ final class ChargeControlService: ObservableObject {
         shared.restoreBeforeTermination()
     }
 
-    static func restoreAndUnregisterForRemoval() {
+    @discardableResult
+    static func restoreAndUnregisterForRemoval() -> Bool {
         let service = appService
         guard service.status == .enabled else {
-            if !UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded),
-               service.status != .notRegistered {
-                try? service.unregister()
-            }
-            return
+            guard service.status != .notRegistered else { return true }
+            guard !UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded)
+            else { return false }
+            return unregisterForRemoval(service)
         }
         let connection = NSXPCConnection(machServiceName: ChargeControlIdentifiers.helperID,
                                          options: .privileged)
@@ -293,7 +293,7 @@ final class ChargeControlService: ObservableObject {
             as? ChargeControlXPCProtocol
         guard let proxy else {
             connection.invalidate()
-            return
+            return false
         }
         proxy.restoreNormal { data in
             if let response = ChargeControlIPC.decodeResponse(data) {
@@ -305,7 +305,17 @@ final class ChargeControlService: ObservableObject {
         }
         _ = semaphore.wait(timeout: .now() + 20)
         connection.invalidate()
-        if resultLock.withLock({ restored }) { try? service.unregister() }
+        guard resultLock.withLock({ restored }) else { return false }
+        return unregisterForRemoval(service)
+    }
+
+    private static func unregisterForRemoval(_ service: SMAppService) -> Bool {
+        do {
+            try service.unregister()
+            return true
+        } catch {
+            return false
+        }
     }
 
     private func evaluate(refreshBattery: Bool = true) {
@@ -408,7 +418,7 @@ final class ChargeControlService: ObservableObject {
     }
 
     private func heartbeat() {
-        guard appliedGate == .forceDischarge, !requestInFlight, !isWorking else { return }
+        guard appliedGate != .allowCharging, !requestInFlight, !isWorking else { return }
         let generation = beginRequest()
         send { proxy, reply in proxy.heartbeat(withReply: reply) } completion: { response in
             guard self.finishRequest(generation) else { return }
@@ -417,7 +427,7 @@ final class ChargeControlService: ObservableObject {
                 return
             }
             self.apply(response)
-            if response.succeeded, response.snapshot.gate != .forceDischarge,
+            if response.succeeded, response.snapshot.gate == .allowCharging,
                self.isCalibrating || self.isDischargingToLimit {
                 self.mode = .limit
                 self.releaseSleepAssertion()
@@ -686,7 +696,7 @@ final class ChargeControlService: ObservableObject {
                 self.refreshAccessState()
                 if self.accessState == .enabled { self.requestStatus() }
             }
-            if self.appliedGate == .forceDischarge { self.heartbeat() }
+            if self.appliedGate != .allowCharging { self.heartbeat() }
             self.evaluate()
         }
     }

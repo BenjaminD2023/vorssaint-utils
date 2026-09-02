@@ -13662,9 +13662,10 @@ struct MetricsTests {
             ChargeCalibrationState(phase: .restoringLimit, holdStartedAt: nil, savedLimit: 80),
             chargePercent: 80, now: calNow) == nil,
                "calibration finishes once the battery is back at the saved limit")
-        expect(ChargeControlPolicy.restoreReason(isDischarging: true, heartbeatAge: 8)
-                && !ChargeControlPolicy.restoreReason(isDischarging: true, heartbeatAge: 2),
-               "force discharge restores if the app heartbeat is lost")
+        expect(ChargeControlPolicy.restoreReason(hasActiveGate: true, heartbeatAge: 8)
+                && !ChargeControlPolicy.restoreReason(hasActiveGate: true, heartbeatAge: 2)
+                && !ChargeControlPolicy.restoreReason(hasActiveGate: false, heartbeatAge: 8),
+               "every active charge gate restores if the app heartbeat is lost")
         expect(ChargeControlPolicy.paddedSMCBytes([0x01, 0x00, 0x00, 0x00], to: 4)
                 == [0x01, 0x00, 0x00, 0x00]
                 && ChargeControlPolicy.paddedSMCBytes([0x01, 0x00, 0x00, 0x00], to: 1) == [0x01]
@@ -22524,9 +22525,10 @@ struct MetricsTests {
         expect(selfUninstallSource.contains("guard detachFromSystem() else")
                 && selfUninstallSource.contains("restoreSleepBeforeRemoval() -> Bool")
                 && selfUninstallSource.contains("guard FanControlService.restoreAndUnregisterForRemoval() else")
+                && selfUninstallSource.contains("guard ChargeControlService.restoreAndUnregisterForRemoval() else")
                 && selfUninstallSource.contains("adminPromptRecover")
                 && selfUninstallSource.contains("verification.status == 0"),
-               "in-app uninstall aborts unless fans and normal sleep are restored before removal")
+               "in-app uninstall aborts unless charging, fans, and normal sleep are restored before removal")
         expect(uninstallScriptSource.contains("SleepDisabled"),
                "script uninstall reads the sleep setting back for itself")
 

@@ -117,7 +117,7 @@ enum SelfUninstall {
             return false
         }
         guard FanControlService.restoreAndUnregisterForRemoval() else { return false }
-        ChargeControlService.restoreAndUnregisterForRemoval()
+        guard ChargeControlService.restoreAndUnregisterForRemoval() else { return false }
         // Unregister the login item (scoped to our bundle id). The stored
         // intent goes with it, or the startup repair would quietly register
         // the item again after the user asked for a clean detach.
