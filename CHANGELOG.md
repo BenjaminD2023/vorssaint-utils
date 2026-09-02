@@ -30,6 +30,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The screen recording editor can now blur any area of the picture for as long as you choose, keeping names, emails and other private details unreadable even inside zooms.
 
 ### Changed
+- Using the same Window Layout shortcut for left or right again now carries the window to the display on that side, landing on the half it came in through.
 - Window controls, Dock clicks and mouse exceptions now share consistent on-screen window parsing while preserving their existing behavior. Thanks to @PathGao.
 - The Command Bar now stays responsive while typing, doing less work on each keystroke and reading the battery and memory levels in the background. Thanks to @PathGao.
 - System monitor process breakdowns now normalize per-app CPU usage against total active processor cores and cap grouped GPU and energy percentages at 100%. Thanks to @pergioa.
