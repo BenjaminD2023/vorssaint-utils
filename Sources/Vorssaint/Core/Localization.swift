@@ -236,6 +236,8 @@ struct Strings {
     let advancedUninstallButton: String
     let advancedUninstallConfirmTitle: String
     let advancedUninstallConfirmBody: String
+    let advancedUninstallFailedTitle: String
+    let advancedUninstallFailedBody: String
 
     // MARK: Settings — general
     let launchAtLogin: String
@@ -323,6 +325,8 @@ struct Strings {
     let switcherShortcutHintApps: String
     let switcherShortcutHintWindows: String
     let switcherWindowShortcutCaption: String
+    let switcherTakeOverSystemShortcuts: String
+    let switcherTakeOverSystemShortcutsCaption: String
     let switcherAppearanceDelay: String
     let switcherAppearanceDelayCaption: String
     let switcherMergeTabs: String
@@ -940,6 +944,9 @@ struct Strings {
     let cleaningOverlaySubtitle: String
     let cleaningOverlayUnlock: String
     let cleaningOverlayMouseHint: String
+    let cleaningKeepScreenVisibleToggle: String
+    let cleaningKeepScreenVisibleCaption: String
+    let cleaningStartNow: String
     let cleaningNeedsAxTitle: String
     let cleaningNeedsAxBody: String
 
@@ -1122,6 +1129,9 @@ struct Strings {
     let switcherScreenPlacementMenuBar: String
     let switcherScreenPlacementActiveWindow: String
     let switcherScreenPlacementCaption: String
+    let smoothScrollResponseLabel: String
+    let mouseAccelerationName: String
+    let mouseAccelerationCaption: String
 }
 
 // MARK: - Português (Brasil)
@@ -1247,6 +1257,8 @@ extension Strings {
         advancedUninstallButton: "Desinstalar o Vorssaint completamente",
         advancedUninstallConfirmTitle: "Desinstalar o Vorssaint?",
         advancedUninstallConfirmBody: "O Vorssaint vai limpar as permissões, apagar as preferências e ir para a Lixeira, e então fechar. Esta ação não pode ser desfeita pelo app, mas ele fica na Lixeira até você esvaziá-la.",
+        advancedUninstallFailedTitle: "A desinstalação parou",
+        advancedUninstallFailedBody: "O Vorssaint não conseguiu restaurar uma configuração do sistema que ele mudou: repouso, velocidade das ventoinhas ou aceleração do mouse. Nada foi removido. Tente de novo e permita o pedido de senha, se ele aparecer.",
 
         launchAtLogin: "Iniciar junto com o Mac",
         languageLabel: "Idioma",
@@ -1277,7 +1289,7 @@ extension Strings {
         mouseNavigationActiveNow: "Botões laterais ativos agora",
         smoothScrollName: "Rolagem suave",
         smoothScrollCaption: "Transforma cada passo da rodinha do mouse em um deslize curto e macio. O trackpad não muda.",
-        smoothScrollStepLabel: "Distância por passo",
+        smoothScrollStepLabel: "Velocidade da rolagem",
         mouseNavigationSection: "Navegação",
         mouseNavigationEnable: "Usar botões laterais para voltar e avançar",
         mouseNavigationCaption: "Converte os botões Voltar e Avançar do mouse em comandos de navegação no Finder, navegadores e apps compatíveis.",
@@ -1330,6 +1342,8 @@ extension Strings {
         switcherShortcutHintApps: "Apps",
         switcherShortcutHintWindows: "Janelas",
         switcherWindowShortcutCaption: "Abre um seletor das janelas do app em primeiro plano. Com o seletor de apps aberto, pula entre as janelas do app selecionado.",
+        switcherTakeOverSystemShortcuts: "Substituir ⌘Tab e ⌘` do macOS",
+        switcherTakeOverSystemShortcutsCaption: "Desativa os atalhos correspondentes de apps e janelas do macOS somente enquanto o alternador do Vorssaint estiver ativo. Todos os apps abertos continuam acessíveis.",
         switcherAppearanceDelay: "Atraso de exibição",
         switcherAppearanceDelayCaption: "Quanto tempo o atalho precisa ficar pressionado antes de o alternador aparecer.",
         switcherMergeTabs: "Mostrar uma entrada por app",
@@ -1926,6 +1940,9 @@ extension Strings {
         cleaningOverlaySubtitle: "Pressione Esc 5 vezes para desbloquear",
         cleaningOverlayUnlock: "Desbloquear",
         cleaningOverlayMouseHint: "O mouse e o trackpad continuam funcionando",
+        cleaningKeepScreenVisibleToggle: "Manter a tela visível",
+        cleaningKeepScreenVisibleCaption: "Exibe um indicador discreto no canto da tela em vez de escurecer o conteúdo.",
+        cleaningStartNow: "Bloquear teclado agora",
         cleaningNeedsAxTitle: "Precisa de Acessibilidade",
         cleaningNeedsAxBody: "Para bloquear o teclado com segurança, o Vorssaint precisa da permissão de Acessibilidade. Conceda em Ajustes do Sistema e tente de novo.",
 
@@ -2100,7 +2117,10 @@ extension Strings {
         switcherScreenPlacementPointer: "Tela com o ponteiro",
         switcherScreenPlacementMenuBar: "Tela com a barra de menus",
         switcherScreenPlacementActiveWindow: "Tela com a janela ativa",
-        switcherScreenPlacementCaption: "Em qual tela o alternador abre quando há mais de uma conectada."
+        switcherScreenPlacementCaption: "Em qual tela o alternador abre quando há mais de uma conectada.",
+        smoothScrollResponseLabel: "Resposta",
+        mouseAccelerationName: "Desativar aceleração do mouse",
+        mouseAccelerationCaption: "Remove a aceleração do cursor para os mouses conectados. A configuração anterior volta ao desligar esta opção ou sair do Vorssaint."
     )
 }
 
@@ -2227,6 +2247,8 @@ extension Strings {
         advancedUninstallButton: "Uninstall Vorssaint completely",
         advancedUninstallConfirmTitle: "Uninstall Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint will clear its permissions, remove its preferences and move to the Trash, then quit. This can't be undone from the app, but it stays in the Trash until you empty it.",
+        advancedUninstallFailedTitle: "Uninstall stopped",
+        advancedUninstallFailedBody: "Vorssaint could not put back a system setting it changed: sleep, fan speed or mouse acceleration. Nothing was removed. Try again and allow the password request if it appears.",
 
         launchAtLogin: "Launch at login",
         languageLabel: "Language",
@@ -2257,7 +2279,7 @@ extension Strings {
         mouseNavigationActiveNow: "Side buttons active right now",
         smoothScrollName: "Smooth scrolling",
         smoothScrollCaption: "Turns each mouse wheel step into a short, gentle glide. The trackpad is not affected.",
-        smoothScrollStepLabel: "Distance per step",
+        smoothScrollStepLabel: "Scrolling speed",
         mouseNavigationSection: "Navigation",
         mouseNavigationEnable: "Use side buttons for Back and Forward",
         mouseNavigationCaption: "Turns the mouse Back and Forward buttons into navigation commands in Finder, browsers and compatible apps.",
@@ -2310,6 +2332,8 @@ extension Strings {
         switcherShortcutHintApps: "Apps",
         switcherShortcutHintWindows: "Windows",
         switcherWindowShortcutCaption: "Opens a switcher for the frontmost app's windows. While the Apps switcher is open, jumps between the selected app's windows.",
+        switcherTakeOverSystemShortcuts: "Replace macOS ⌘Tab and ⌘`",
+        switcherTakeOverSystemShortcutsCaption: "Disables the matching macOS app and window shortcuts only while Vorssaint's switcher is active. All running apps stay reachable.",
         switcherAppearanceDelay: "Appearance delay",
         switcherAppearanceDelayCaption: "How long the shortcut must be held before the switcher appears.",
         switcherMergeTabs: "Show one entry per app",
@@ -2906,6 +2930,9 @@ extension Strings {
         cleaningOverlaySubtitle: "Press Escape 5 times to unlock",
         cleaningOverlayUnlock: "Unlock",
         cleaningOverlayMouseHint: "Your mouse and trackpad still work",
+        cleaningKeepScreenVisibleToggle: "Keep screen visible",
+        cleaningKeepScreenVisibleCaption: "Shows a discreet indicator in the corner of the screen instead of blacking out content.",
+        cleaningStartNow: "Lock keyboard now",
         cleaningNeedsAxTitle: "Accessibility needed",
         cleaningNeedsAxBody: "To lock the keyboard safely, Vorssaint needs Accessibility permission. Grant it in System Settings and try again.",
 
@@ -3080,6 +3107,9 @@ extension Strings {
         switcherScreenPlacementPointer: "Screen with the pointer",
         switcherScreenPlacementMenuBar: "Screen with the menu bar",
         switcherScreenPlacementActiveWindow: "Screen with the active window",
-        switcherScreenPlacementCaption: "Which display the switcher opens on when more than one is connected."
+        switcherScreenPlacementCaption: "Which display the switcher opens on when more than one is connected.",
+        smoothScrollResponseLabel: "Response",
+        mouseAccelerationName: "Disable mouse acceleration",
+        mouseAccelerationCaption: "Removes pointer acceleration for connected mice. Your previous setting returns when this is turned off or Vorssaint quits."
     )
 }

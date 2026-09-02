@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Удалить Vorssaint полностью",
         advancedUninstallConfirmTitle: "Удалить Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint очистит разрешения, удалит настройки и переместится в Корзину, после чего закроется. Это нельзя отменить из приложения, но файл останется в Корзине, пока вы её не очистите.",
+        advancedUninstallFailedTitle: "Удаление остановлено",
+        advancedUninstallFailedBody: "Vorssaint не смог вернуть изменённую системную настройку: режим сна, скорость вентиляторов или ускорение мыши. Ничего не удалено. Повторите попытку и разрешите запрос пароля, если он появится.",
 
         launchAtLogin: "Запускать при входе",
         languageLabel: "Язык",
@@ -155,7 +157,7 @@ extension Strings {
         mouseNavigationActiveNow: "Боковые кнопки сейчас активны",
         smoothScrollName: "Плавная прокрутка",
         smoothScrollCaption: "Превращает каждый щелчок колёсика мыши в короткое плавное скольжение. Трекпад не меняется.",
-        smoothScrollStepLabel: "Расстояние за щелчок",
+        smoothScrollStepLabel: "Скорость прокрутки",
         mouseNavigationSection: "Навигация",
         mouseNavigationEnable: "Использовать боковые кнопки для переходов назад и вперёд",
         mouseNavigationCaption: "Преобразует кнопки мыши Назад и Вперёд в команды навигации для Finder, браузеров и совместимых приложений.",
@@ -208,6 +210,8 @@ extension Strings {
         switcherShortcutHintApps: "Приложения",
         switcherShortcutHintWindows: "Окна",
         switcherWindowShortcutCaption: "Открывает переключатель окон приложения на переднем плане. Пока открыт переключатель приложений, переходит между окнами выбранного приложения.",
+        switcherTakeOverSystemShortcuts: "Заменить ⌘Tab и ⌘` macOS",
+        switcherTakeOverSystemShortcutsCaption: "Отключает соответствующие сочетания macOS только на время работы переключателя Vorssaint. Все запущенные приложения остаются доступны.",
         switcherAppearanceDelay: "Задержка появления",
         switcherAppearanceDelayCaption: "Как долго нужно удерживать сочетание клавиш, прежде чем появится переключатель.",
         switcherMergeTabs: "Показывать одну запись на приложение",
@@ -804,6 +808,9 @@ extension Strings {
         cleaningOverlaySubtitle: "Нажмите Esc 5 раз, чтобы разблокировать",
         cleaningOverlayUnlock: "Разблокировать",
         cleaningOverlayMouseHint: "Мышь и трекпад продолжают работать",
+        cleaningKeepScreenVisibleToggle: "Оставлять экран видимым",
+        cleaningKeepScreenVisibleCaption: "Показывает компактный индикатор в углу экрана вместо затемнения содержимого.",
+        cleaningStartNow: "Заблокировать клавиатуру сейчас",
         cleaningNeedsAxTitle: "Нужен Универсальный доступ",
         cleaningNeedsAxBody: "Чтобы безопасно блокировать клавиатуру, Vorssaint нужен доступ к Универсальному доступу. Выдайте его в Системных настройках и попробуйте снова.",
 
@@ -978,6 +985,9 @@ extension Strings {
         switcherScreenPlacementPointer: "Экран с указателем",
         switcherScreenPlacementMenuBar: "Экран со строкой меню",
         switcherScreenPlacementActiveWindow: "Экран с активным окном",
-        switcherScreenPlacementCaption: "На каком экране открывается переключатель, когда подключено несколько экранов."
+        switcherScreenPlacementCaption: "На каком экране открывается переключатель, когда подключено несколько экранов.",
+        smoothScrollResponseLabel: "Отклик",
+        mouseAccelerationName: "Отключить ускорение мыши",
+        mouseAccelerationCaption: "Отключает ускорение указателя для подключённых мышей. Прежняя настройка вернётся после выключения функции или выхода из Vorssaint."
     )
 }

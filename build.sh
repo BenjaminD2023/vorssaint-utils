@@ -56,6 +56,10 @@ else
 fi
 FAN_HELPER_ID="$APP_BUNDLE_ID.fan-control"
 CHARGE_HELPER_ID="$APP_BUNDLE_ID.charge-control"
+# Now Playing is read through /usr/bin/perl loading this library; see
+# Sources/NowPlayingAdapter. Staged under Contents/Frameworks, signed on its own.
+NOW_PLAYING_ADAPTER_ID="$APP_BUNDLE_ID.now-playing"
+NOW_PLAYING_ADAPTER="libVorssaintNowPlaying.dylib"
 TARGET="arm64-apple-macosx14.0"
 ENTITLEMENTS="Resources/Vorssaint.entitlements"
 LEGACY_IDENTITY="Vorssaint Utils Signing"
@@ -127,6 +131,7 @@ finalize_installed_bundle_after_child() {
     local bundle="$1"
     local helper="$bundle/Contents/Library/LaunchServices/$FAN_HELPER_ID"
     local charge_helper="$bundle/Contents/Library/LaunchServices/$CHARGE_HELPER_ID"
+    local adapter="$bundle/Contents/Frameworks/$NOW_PLAYING_ADAPTER"
     local devid
     devid="$(developer_id_identity)"
 
@@ -137,6 +142,8 @@ finalize_installed_bundle_after_child() {
             --options runtime --timestamp --identifier "$FAN_HELPER_ID" --sign "$devid" "$helper"
         [[ -f "$charge_helper" ]] && codesign_with_timestamp_retry --force --strip-disallowed-xattrs \
             --options runtime --timestamp --identifier "$CHARGE_HELPER_ID" --sign "$devid" "$charge_helper"
+        [[ -f "$adapter" ]] && codesign_with_timestamp_retry --force --strip-disallowed-xattrs \
+            --options runtime --timestamp --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$devid" "$adapter"
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
             --entitlements "$ENTITLEMENTS" --sign "$devid" "$bundle"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
@@ -144,16 +151,21 @@ finalize_installed_bundle_after_child() {
             --identifier "$FAN_HELPER_ID" --sign "$LEGACY_IDENTITY" "$helper"
         [[ -f "$charge_helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
             --identifier "$CHARGE_HELPER_ID" --sign "$LEGACY_IDENTITY" "$charge_helper"
+        [[ -f "$adapter" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
+            --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$LEGACY_IDENTITY" "$adapter"
         /usr/bin/codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$bundle"
     else
         [[ -f "$helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
             --identifier "$FAN_HELPER_ID" --sign - "$helper"
         [[ -f "$charge_helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
             --identifier "$CHARGE_HELPER_ID" --sign - "$charge_helper"
+        [[ -f "$adapter" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
+            --identifier "$NOW_PLAYING_ADAPTER_ID" --sign - "$adapter"
         /usr/bin/codesign --force --strip-disallowed-xattrs --sign - "$bundle"
     fi
     [[ -f "$helper" ]] && /usr/bin/codesign --verify --strict "$helper"
     [[ -f "$charge_helper" ]] && /usr/bin/codesign --verify --strict "$charge_helper"
+    [[ -f "$adapter" ]] && /usr/bin/codesign --verify --strict "$adapter"
     /usr/bin/codesign --verify --deep --strict "$bundle"
     echo "✓ Signature ready: $bundle"
 }
@@ -180,6 +192,7 @@ else
 fi
 SDK_COMPAT_FLAGS=()
 VM_STATISTICS_COMPAT_FLAGS=(-I Sources/VMStatisticsCompat)
+HID_EVENT_SYSTEM_FLAGS=(-I Sources/HIDEventSystem)
 if [[ "$SDK" == "$PINNED_SDK" ]]; then
     # Swift 6.4 can read the SDK 26 interfaces when given their compiler version.
     SDK_COMPAT_FLAGS=(-Xfrontend -interface-compiler-version -Xfrontend 6.3.2)
@@ -195,7 +208,7 @@ fi
 discard_test_preferences() {
     local preferences="$HOME/Library/Preferences" name
     for name in "vorss.tests." "com.vorssaint.tests."; do
-        rm -f "$preferences"/$name*.plist
+        rm -f "$preferences"/$name*.plist(N)
     done
     rm -f "$preferences/metrics-tests.plist"
     local survivors
@@ -221,6 +234,8 @@ if (( TEST )); then
     swiftc -Onone -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" \
         "${VM_STATISTICS_COMPAT_FLAGS[@]}" \
         Sources/Vorssaint/Services/Media/MediaSupport.swift \
+        Sources/Vorssaint/Core/QuitProtectionSupport.swift \
+        Sources/Vorssaint/Core/QuitProtectionStrings.swift \
         Sources/Vorssaint/Core/Defaults.swift \
         Sources/Vorssaint/Core/FeatureCatalog.swift \
         Sources/Vorssaint/Core/FeaturePresets.swift \
@@ -266,6 +281,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/Recorder/RecorderTypingTrack.swift \
         Sources/Vorssaint/Services/Recorder/RecorderTimeline.swift \
         Sources/Vorssaint/Services/Recorder/RecorderTextOverlay.swift \
+        Sources/Vorssaint/Services/Recorder/RecorderBlurRegion.swift \
         Sources/Vorssaint/Services/Recorder/RecorderEditDocument.swift \
         Sources/Vorssaint/Core/AppInfo.swift \
         Sources/Vorssaint/Core/GlobalShortcut.swift \
@@ -310,8 +326,12 @@ if (( TEST )); then
         Sources/Vorssaint/Services/MiddleClick/MiddleClickSupport.swift \
         Sources/Vorssaint/Services/MouseNavigation/MouseNavigationSupport.swift \
         Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutSupport.swift \
+        Sources/Vorssaint/Services/MouseButtons/MouseSpacesGestureSupport.swift \
+        Sources/Vorssaint/Services/MouseClickDebounce/MouseClickDebounceSupport.swift \
         Sources/Vorssaint/Services/MouseExceptions/MouseAppExceptionSupport.swift \
+        Sources/Vorssaint/Services/WindowServerSupport.swift \
         Sources/Vorssaint/Core/MouseButtonStrings.swift \
+        Sources/Vorssaint/Core/MouseClickDebounceStrings.swift \
         Sources/Vorssaint/Core/MouseExceptionStrings.swift \
         Sources/Vorssaint/Core/ClipboardIgnoredAppsStrings.swift \
         Sources/Vorssaint/Core/WindowPreviewExclusionStrings.swift \
@@ -340,8 +360,11 @@ if (( TEST )); then
         Sources/Vorssaint/Services/SuperKey/SuperKeySupport.swift \
         Sources/Vorssaint/Services/SuperKey/SuperKeyMappingGuard.swift \
         Sources/Vorssaint/Core/SuperKeyStrings.swift \
+        Sources/Vorssaint/Services/SessionActivity.swift \
+        Sources/Vorssaint/Services/SessionActivitySupport.swift \
         Sources/Vorssaint/Services/ScrollWheelSupport.swift \
         Sources/Vorssaint/Services/SmoothScrollSupport.swift \
+        Sources/Vorssaint/Services/MouseAcceleration/MouseAccelerationSupport.swift \
         Sources/Vorssaint/Services/FocusFollowsMouse/FocusFollowsMouseSupport.swift \
         Sources/Vorssaint/Services/Switcher/SwitcherModels.swift \
         Sources/Vorssaint/Services/Switcher/SwitcherSupport.swift \
@@ -392,14 +415,14 @@ if (( DEV )); then
     write_swift_output_file_map "$APP_OUTPUT_FILE_MAP" "$APP_OBJECT_DIR" "${APP_SOURCES[@]}"
     swiftc "${APP_OPTIMIZATION_FLAGS[@]}" -incremental -j "$(sysctl -n hw.logicalcpu)" \
         -output-file-map "$APP_OUTPUT_FILE_MAP" \
-        -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" \
+        -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" \
         "${BUILD_VARIANT_FLAGS[@]}" \
         "${APP_SOURCES[@]}" -o "build/$EXECUTABLE"
 else
     rm -rf build
     mkdir -p build
     swiftc "${APP_OPTIMIZATION_FLAGS[@]}" -target "$TARGET" -sdk "$SDK" \
-        "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${BUILD_VARIANT_FLAGS[@]}" \
+        "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" "${BUILD_VARIANT_FLAGS[@]}" \
         "${APP_SOURCES[@]}" -o "build/$EXECUTABLE"
 fi
 
@@ -425,6 +448,12 @@ swiftc -O -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${BUILD_VARIAN
     Sources/ChargeControlHelper/main.swift \
     -o "build/$CHARGE_HELPER_ID"
 "build/$CHARGE_HELPER_ID" --selftest
+
+echo "▸ Compiling Now Playing adapter…"
+swiftc -O -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" -emit-library \
+    -module-name VorssaintNowPlaying \
+    Sources/NowPlayingAdapter/NowPlayingAdapter.swift \
+    -o "build/$NOW_PLAYING_ADAPTER"
 
 echo "▸ Generating app icon…"
 swift Tools/MakeIcon.swift build/AppIcon.iconset
@@ -465,6 +494,9 @@ mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources" \
     "$STAGE/Contents/Library/LaunchDaemons" "$STAGE/Contents/Library/LaunchServices"
 cp "build/$EXECUTABLE" "$STAGE/Contents/MacOS/$EXECUTABLE"
 cp "build/$FAN_HELPER_ID" "$STAGE/Contents/Library/LaunchServices/$FAN_HELPER_ID"
+mkdir -p "$STAGE/Contents/Frameworks"
+cp "build/$NOW_PLAYING_ADAPTER" "$STAGE/Contents/Frameworks/$NOW_PLAYING_ADAPTER"
+cp Resources/now-playing.pl "$STAGE/Contents/Resources/now-playing.pl"
 cp Resources/com.vorssaint.utils.fan-control.plist \
     "$STAGE/Contents/Library/LaunchDaemons/$FAN_HELPER_ID.plist"
 cp "build/$CHARGE_HELPER_ID" "$STAGE/Contents/Library/LaunchServices/$CHARGE_HELPER_ID"
@@ -570,11 +602,25 @@ codesign_named_helper() {
     fi
 }
 
+codesign_now_playing_adapter() {
+    local target="$1"
+    if [[ -n "$DEVID" ]]; then
+        codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
+            --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$DEVID" "$target"
+    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+        codesign --force --strip-disallowed-xattrs --identifier "$NOW_PLAYING_ADAPTER_ID" \
+            --sign "$LEGACY_IDENTITY" "$target"
+    else
+        codesign --force --strip-disallowed-xattrs --identifier "$NOW_PLAYING_ADAPTER_ID" --sign - "$target"
+    fi
+}
+
 sign_bundle() {
     local bundle="$1"
     local executable="$bundle/Contents/MacOS/$EXECUTABLE"
     local helper="$bundle/Contents/Library/LaunchServices/$FAN_HELPER_ID"
     local charge_helper="$bundle/Contents/Library/LaunchServices/$CHARGE_HELPER_ID"
+    local adapter="$bundle/Contents/Frameworks/$NOW_PLAYING_ADAPTER"
 
     if [[ -n "$DEVID" ]]; then
         echo "  signing with Developer ID (hardened runtime): $DEVID"
@@ -585,6 +631,7 @@ sign_bundle() {
     fi
     [[ -f "$helper" ]] && codesign_named_helper "$helper" "$FAN_HELPER_ID"
     [[ -f "$charge_helper" ]] && codesign_named_helper "$charge_helper" "$CHARGE_HELPER_ID"
+    [[ -f "$adapter" ]] && codesign_now_playing_adapter "$adapter"
     codesign_app "$bundle"
 
     # If local filesystem metadata invalidates the first signature, sign once
@@ -594,11 +641,13 @@ sign_bundle() {
         xattr -c -r "$bundle" 2>/dev/null || true
         [[ -f "$helper" ]] && codesign_named_helper "$helper" "$FAN_HELPER_ID"
         [[ -f "$charge_helper" ]] && codesign_named_helper "$charge_helper" "$CHARGE_HELPER_ID"
+        [[ -f "$adapter" ]] && codesign_now_playing_adapter "$adapter"
         codesign_app "$bundle"
     fi
     [[ -f "$executable" ]] && codesign --verify --strict "$executable"
     [[ -f "$helper" ]] && codesign --verify --strict "$helper"
     [[ -f "$charge_helper" ]] && codesign --verify --strict "$charge_helper"
+    [[ -f "$adapter" ]] && codesign --verify --strict "$adapter"
     codesign --verify --deep --strict "$bundle"
 }
 

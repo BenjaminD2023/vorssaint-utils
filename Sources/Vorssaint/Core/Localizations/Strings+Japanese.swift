@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Vorssaint を完全にアンインストール",
         advancedUninstallConfirmTitle: "Vorssaint をアンインストールしますか？",
         advancedUninstallConfirmBody: "Vorssaint はアクセス権を消去し、環境設定を削除し、ゴミ箱に移動してから終了します。この操作はアプリからは取り消せませんが、ゴミ箱を空にするまではゴミ箱に残ります。",
+        advancedUninstallFailedTitle: "アンインストールを中止しました",
+        advancedUninstallFailedBody: "Vorssaint が変更したシステム設定（スリープ、ファンの回転数、マウス加速）を元に戻せませんでした。何も削除していません。もう一度試して、パスワードの入力を求められたら許可してください。",
 
         launchAtLogin: "ログイン時に起動",
         languageLabel: "言語",
@@ -155,7 +157,7 @@ extension Strings {
         mouseNavigationActiveNow: "サイドボタンは現在有効です",
         smoothScrollName: "スムーズスクロール",
         smoothScrollCaption: "マウスホイールの1目盛りを短くなめらかなスライドに変えます。トラックパッドは変わりません。",
-        smoothScrollStepLabel: "1目盛りの距離",
+        smoothScrollStepLabel: "スクロール速度",
         mouseNavigationSection: "ナビゲーション",
         mouseNavigationEnable: "サイドボタンで戻ると進むを操作",
         mouseNavigationCaption: "マウスの戻るボタンと進むボタンを、Finder、ブラウザ、対応アプリのナビゲーション操作に変換します。",
@@ -207,6 +209,8 @@ extension Strings {
         switcherShortcutHintApps: "アプリ",
         switcherShortcutHintWindows: "ウインドウ",
         switcherWindowShortcutCaption: "最前面のアプリのウインドウ用スイッチャーを開きます。アプリスイッチャー表示中は、選択中のアプリのウインドウを順に切り替えます。",
+        switcherTakeOverSystemShortcuts: "macOS の ⌘Tab と ⌘` を置き換える",
+        switcherTakeOverSystemShortcutsCaption: "Vorssaint のスイッチャーが動作中の間だけ、対応する macOS のアプリとウインドウのショートカットを無効にします。実行中のすべてのアプリに切り替えられます。",
         switcherAppearanceDelay: "表示までの待ち時間",
         switcherAppearanceDelayCaption: "スイッチャーが表示されるまでショートカットを押し続ける時間です。",
         switcherMergeTabs: "アプリごとに1つにまとめて表示",
@@ -803,6 +807,9 @@ extension Strings {
         cleaningOverlaySubtitle: "Escキーを5回押すとロックを解除します",
         cleaningOverlayUnlock: "ロックを解除",
         cleaningOverlayMouseHint: "マウスとトラックパッドはそのまま使えます",
+        cleaningKeepScreenVisibleToggle: "画面を表示したままにする",
+        cleaningKeepScreenVisibleCaption: "画面を暗くせず、画面の隅に控えめなインジケータを表示します。",
+        cleaningStartNow: "今すぐキーボードをロック",
         cleaningNeedsAxTitle: "アクセシビリティが必要です",
         cleaningNeedsAxBody: "キーボードを安全にロックするには、Vorssaint にアクセシビリティのアクセス権が必要です。システム設定で許可して、もう一度お試しください。",
 
@@ -977,6 +984,9 @@ extension Strings {
         switcherScreenPlacementPointer: "ポインタのある画面",
         switcherScreenPlacementMenuBar: "メニューバーのある画面",
         switcherScreenPlacementActiveWindow: "アクティブなウインドウのある画面",
-        switcherScreenPlacementCaption: "複数の画面を接続しているとき、スイッチャーをどの画面に表示するかを選びます。"
+        switcherScreenPlacementCaption: "複数の画面を接続しているとき、スイッチャーをどの画面に表示するかを選びます。",
+        smoothScrollResponseLabel: "反応",
+        mouseAccelerationName: "マウス加速を無効にする",
+        mouseAccelerationCaption: "接続したマウスのポインタ加速を無効にします。オフにするか Vorssaint を終了すると以前の設定に戻ります。"
     )
 }
