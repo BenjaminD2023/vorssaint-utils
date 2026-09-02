@@ -123,6 +123,7 @@ final class SystemMonitor: ObservableObject {
     private var pendingRefresh = false
     private var pendingRefreshSuppressesGPU = false
     private var suppressGPUReadsUntil: TimeInterval = 0
+    private var powerStateRevision = 0
 
     // SMC sensors
     private var smc: SMCClient?
@@ -208,7 +209,7 @@ final class SystemMonitor: ObservableObject {
 
     deinit {
         if let powerSourceRunLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .defaultMode)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
         }
         if let powerStateObserver {
             NotificationCenter.default.removeObserver(powerStateObserver)
@@ -228,7 +229,7 @@ final class SystemMonitor: ObservableObject {
             monitor.powerStateDidChange()
         }, context)?.takeRetainedValue()
         if let powerSourceRunLoopSource {
-            CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .defaultMode)
+            CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
         }
     }
 
@@ -238,6 +239,12 @@ final class SystemMonitor: ObservableObject {
         runOnMain { [weak self] in
             guard let self, shouldRun,
                   currentPlan(defaults: .standard).needPower else { return }
+            powerStateRevision &+= 1
+            if let battery = SystemInfo.batterySnapshot() {
+                var updated = snapshot
+                Self.applyBatteryState(battery, to: &updated)
+                snapshot = updated
+            }
             let foreground = fullMonitorVisible || menuPanelNeeds.any
             let powerStride = MonitorSamplingPolicy.sampleStride(for: .power,
                                                                  intervalSeconds: intervalSeconds,
@@ -245,6 +252,16 @@ final class SystemMonitor: ObservableObject {
             tickCount = MonitorSamplingPolicy.alignedTick(tickCount, wakeTicks: powerStride)
             refresh()
         }
+    }
+
+    private static func applyBatteryState(_ battery: BatteryInfo,
+                                          to snapshot: inout SystemSnapshot) {
+        var power = snapshot.power ?? PowerReading()
+        power.hasBattery = true
+        power.chargePercent = battery.percent
+        power.isCharging = battery.isCharging
+        power.externalConnected = battery.externalConnected
+        snapshot.power = power
     }
 
     /// Low Power Mode is not a power-source change, so IOPS notifications
@@ -624,6 +641,7 @@ final class SystemMonitor: ObservableObject {
         let suppressGPUReadsUntil = self.suppressGPUReadsUntil
         let foregroundSampling = fullMonitorVisible || menuPanelNeeds.any
         let intervalSeconds = self.intervalSeconds
+        let powerStateRevision = self.powerStateRevision
         // Ticks advance by the timer's cadence so `tick % stride` keeps
         // measuring base intervals; mutated on main only, read by the queue
         // through the captured value.
@@ -846,12 +864,17 @@ final class SystemMonitor: ObservableObject {
                 ? self.batteryHistory.publishedValues(whileVisible: foregroundSampling) : []
 
             DispatchQueue.main.async {
+                var publishedSnapshot = next
+                if powerStateRevision != self.powerStateRevision,
+                   let battery = SystemInfo.batterySnapshot() {
+                    Self.applyBatteryState(battery, to: &publishedSnapshot)
+                }
                 // Skip pure carry-over publishes (nothing sampled, same plan,
                 // same mode): the values are identical to the ones on screen.
                 let planChanged = plan != self.lastPublishedPlan
                     || foregroundSampling != self.lastPublishedForeground
                 if sampledAnything || planChanged {
-                    self.snapshot = next
+                    self.snapshot = publishedSnapshot
                     self.lastPublishedPlan = plan
                     self.lastPublishedForeground = foregroundSampling
                 }
