@@ -3,6 +3,7 @@
 
 import Darwin
 import Foundation
+import IOKit
 import IOKit.ps
 
 struct BatteryInfo: Equatable {
@@ -48,6 +49,30 @@ enum SystemInfo {
         return BatteryInfo(percent: percent,
                            isCharging: charging,
                            isOnBattery: state == kIOPSBatteryPowerValue,
+                           externalConnected: externalConnected)
+    }
+
+    /// Reads the battery driver directly, bypassing the cached IOPS snapshot.
+    static func batteryRegistrySnapshot() -> BatteryInfo? {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault,
+                                                  IOServiceMatching("AppleSmartBattery"))
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+
+        var properties: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &properties, kCFAllocatorDefault, 0)
+                == kIOReturnSuccess,
+              let values = properties?.takeRetainedValue() as? [String: Any],
+              let externalConnected = values["ExternalConnected"] as? Bool,
+              let isCharging = values["IsCharging"] as? Bool else { return nil }
+        let current = values["CurrentCapacity"] as? Int ?? 0
+        let maximum = values["MaxCapacity"] as? Int ?? 100
+        let percent = maximum > 0
+            ? Int((Double(current) / Double(maximum) * 100).rounded())
+            : current
+        return BatteryInfo(percent: percent,
+                           isCharging: externalConnected && isCharging,
+                           isOnBattery: !externalConnected,
                            externalConnected: externalConnected)
     }
 

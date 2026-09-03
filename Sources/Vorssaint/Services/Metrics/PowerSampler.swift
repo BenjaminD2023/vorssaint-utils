@@ -84,9 +84,10 @@ final class PowerSampler {
         if let props = batteryProperties() {
             reading.hasBattery = true
             let systemBattery = SystemInfo.batterySnapshot()
-            reading.externalConnected = systemBattery?.externalConnected
-                ?? ((props["ExternalConnected"] as? Bool) ?? false)
-            let reportedCharging = (props["IsCharging"] as? Bool) ?? false
+            reading.externalConnected = (props["ExternalConnected"] as? Bool)
+                ?? systemBattery?.externalConnected
+                ?? false
+            let reportedCharging = props["IsCharging"] as? Bool
 
             let voltageMv = (props["Voltage"] as? Int) ?? 0
             let amperageMa = intValue(props["InstantAmperage"]) ?? intValue(props["Amperage"])

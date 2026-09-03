@@ -188,6 +188,8 @@ final class SystemMonitor: ObservableObject {
     private var powerHistory: MetricHistory
     private var batteryHistory: MetricHistory
     private var powerSourceRunLoopSource: CFRunLoopSource?
+    private var batteryNotificationPort: IONotificationPortRef?
+    private var batteryInterestNotification: io_object_t = 0
     private var powerStateObserver: NSObjectProtocol?
 
     private init() {
@@ -203,6 +205,7 @@ final class SystemMonitor: ObservableObject {
         batteryHistory = MetricHistory(capacity: historyCapacity)
         if PowerSampler.hasInternalBattery {
             installPowerSourceObserver()
+            installBatteryRegistryObserver()
             installLowPowerModeObserver()
         }
     }
@@ -210,6 +213,13 @@ final class SystemMonitor: ObservableObject {
     deinit {
         if let powerSourceRunLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
+        }
+        if batteryInterestNotification != 0 {
+            IOObjectRelease(batteryInterestNotification)
+        }
+        if let batteryNotificationPort {
+            IONotificationPortSetDispatchQueue(batteryNotificationPort, nil)
+            IONotificationPortDestroy(batteryNotificationPort)
         }
         if let powerStateObserver {
             NotificationCenter.default.removeObserver(powerStateObserver)
@@ -233,6 +243,40 @@ final class SystemMonitor: ObservableObject {
         }
     }
 
+    /// AppleSmartBattery changes before the higher-level IOPS cache on some
+    /// cable transitions, so use its direct event as the fast path.
+    private func installBatteryRegistryObserver() {
+        guard let port = IONotificationPortCreate(kIOMainPortDefault) else { return }
+        let battery = IOServiceGetMatchingService(kIOMainPortDefault,
+                                                  IOServiceMatching("AppleSmartBattery"))
+        guard battery != 0 else {
+            IONotificationPortDestroy(port)
+            return
+        }
+        let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        IONotificationPortSetDispatchQueue(port, .main)
+        var notification: io_object_t = 0
+        let result = IOServiceAddInterestNotification(port,
+                                                      battery,
+                                                      kIOGeneralInterest,
+                                                      { context, _, _, _ in
+                                                          guard let context else { return }
+                                                          let monitor = Unmanaged<SystemMonitor>
+                                                              .fromOpaque(context).takeUnretainedValue()
+                                                          monitor.powerStateDidChange()
+                                                      },
+                                                      context,
+                                                      &notification)
+        IOObjectRelease(battery)
+        guard result == KERN_SUCCESS else {
+            IONotificationPortSetDispatchQueue(port, nil)
+            IONotificationPortDestroy(port)
+            return
+        }
+        batteryNotificationPort = port
+        batteryInterestNotification = notification
+    }
+
     /// Refreshes charging state immediately after either macOS or the protected
     /// charge controller changes it, rather than waiting for the background poll.
     func powerStateDidChange() {
@@ -240,7 +284,7 @@ final class SystemMonitor: ObservableObject {
             guard let self, shouldRun,
                   currentPlan(defaults: .standard).needPower else { return }
             powerStateRevision &+= 1
-            if let battery = SystemInfo.batterySnapshot() {
+            if let battery = SystemInfo.batteryRegistrySnapshot() ?? SystemInfo.batterySnapshot() {
                 var updated = snapshot
                 Self.applyBatteryState(battery, to: &updated)
                 snapshot = updated
@@ -866,7 +910,7 @@ final class SystemMonitor: ObservableObject {
             DispatchQueue.main.async {
                 var publishedSnapshot = next
                 if powerStateRevision != self.powerStateRevision,
-                   let battery = SystemInfo.batterySnapshot() {
+                   let battery = SystemInfo.batteryRegistrySnapshot() ?? SystemInfo.batterySnapshot() {
                     Self.applyBatteryState(battery, to: &publishedSnapshot)
                 }
                 // Skip pure carry-over publishes (nothing sampled, same plan,

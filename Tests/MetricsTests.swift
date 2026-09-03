@@ -790,23 +790,27 @@ struct MetricsTests {
                "battery time formats hours and minutes")
         expect(BatteryTimeSupport.formatted(seconds: 30) == "0h 1m",
                "battery time keeps a positive final minute visible")
-        expect(MetricFormat.batteryIsCharging(systemReported: true,
-                                              registryReported: false,
+        expect(MetricFormat.batteryIsCharging(systemReported: false,
+                                              registryReported: true,
                                               amperageMilliamps: 0,
                                               externalConnected: true)
+                && !MetricFormat.batteryIsCharging(systemReported: true,
+                                                   registryReported: false,
+                                                   amperageMilliamps: 1,
+                                                   externalConnected: true)
                 && !MetricFormat.batteryIsCharging(systemReported: false,
-                                                   registryReported: true,
+                                                   registryReported: nil,
                                                    amperageMilliamps: 1,
                                                    externalConnected: true)
                 && MetricFormat.batteryIsCharging(systemReported: nil,
-                                                  registryReported: false,
+                                                  registryReported: nil,
                                                   amperageMilliamps: 1,
                                                   externalConnected: true)
                 && !MetricFormat.batteryIsCharging(systemReported: true,
                                                    registryReported: true,
                                                    amperageMilliamps: 1,
                                                    externalConnected: false),
-               "the system charging flag wins while disconnect always clears charging")
+               "the direct battery flag wins while disconnect always clears charging")
 
         expect(MetricFormat.systemPowerWatts(measured: 3,
                                              batteryWatts: 10,
