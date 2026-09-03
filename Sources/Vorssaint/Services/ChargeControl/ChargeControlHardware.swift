@@ -32,7 +32,6 @@ final class ChargeControlHardware {
         let ch0c = Self.namedKey("CH0C", in: client)
         let chte = Self.namedKey("CHTE", in: client)
         let ch0i = Self.namedKey("CH0I", in: client)
-        let ch0j = Self.namedKey("CH0J", in: client)
         let chie = Self.namedKey("CHIE", in: client)
         let bclmKey = Self.namedKey("BCLM", in: client)
         let acen = Self.namedKey("ACEN", in: client)
@@ -45,13 +44,13 @@ final class ChargeControlHardware {
             } else {
                 dischargePath = nil
             }
-            _ = (ch0b, ch0c, chte, ch0i, ch0j, chie)
+            _ = (ch0b, ch0c, chte, ch0i, chie)
         } else if let chte {
             chargePath = ChargePath(
                 family: .appleSiliconCHT,
                 enable: [(chte, ChargeControlPolicy.paddedSMCBytes([0x00, 0x00, 0x00, 0x00], to: chte.dataSize))],
                 inhibit: [(chte, ChargeControlPolicy.paddedSMCBytes([0x01, 0x00, 0x00, 0x00], to: chte.dataSize))])
-            dischargePath = Self.appleSiliconDischarge(ch0i: ch0i, ch0j: ch0j, chie: chie)
+            dischargePath = Self.appleSiliconDischarge(key: chie, enabledByte: 0x08)
             _ = (ch0b, ch0c)
         } else if ch0b != nil || ch0c != nil {
             var enable: [(key: SMCClient.Key, bytes: [UInt8])] = []
@@ -66,7 +65,7 @@ final class ChargeControlHardware {
                 inhibit.append((ch0c, ChargeControlPolicy.paddedSMCBytes([0x01], to: ch0c.dataSize)))
             }
             chargePath = ChargePath(family: .appleSiliconCH0, enable: enable, inhibit: inhibit)
-            dischargePath = Self.appleSiliconDischarge(ch0i: ch0i, ch0j: ch0j, chie: chie)
+            dischargePath = Self.appleSiliconDischarge(key: ch0i, enabledByte: 0x01)
         } else {
             return nil
         }
@@ -86,7 +85,7 @@ final class ChargeControlHardware {
             return setDischarge(false) && setChargingEnabled(false, limit: cap)
         case .forceDischarge:
             guard profile.supportsDischarge else { return false }
-            return setChargingEnabled(false, limit: cap) && setDischarge(true)
+            return setDischarge(true) && setChargingEnabled(false, limit: cap)
         }
     }
 
@@ -138,25 +137,11 @@ final class ChargeControlHardware {
         return false
     }
 
-    private static func appleSiliconDischarge(ch0i: SMCClient.Key?,
-                                              ch0j: SMCClient.Key?,
-                                              chie: SMCClient.Key?) -> DischargePath? {
-        var on: [(key: SMCClient.Key, bytes: [UInt8])] = []
-        var off: [(key: SMCClient.Key, bytes: [UInt8])] = []
-        if let ch0i {
-            on.append((ch0i, ChargeControlPolicy.paddedSMCBytes([0x01], to: ch0i.dataSize)))
-            off.append((ch0i, ChargeControlPolicy.paddedSMCBytes([0x00], to: ch0i.dataSize)))
-        }
-        if let ch0j {
-            on.append((ch0j, ChargeControlPolicy.paddedSMCBytes([0x01], to: ch0j.dataSize)))
-            off.append((ch0j, ChargeControlPolicy.paddedSMCBytes([0x00], to: ch0j.dataSize)))
-        }
-        if let chie {
-            on.append((chie, ChargeControlPolicy.paddedSMCBytes([0x08], to: chie.dataSize)))
-            off.append((chie, ChargeControlPolicy.paddedSMCBytes([0x00], to: chie.dataSize)))
-        }
-        guard !on.isEmpty else { return nil }
-        return DischargePath(on: on, off: off)
+    private static func appleSiliconDischarge(key: SMCClient.Key?, enabledByte: UInt8) -> DischargePath? {
+        guard let key else { return nil }
+        return DischargePath(
+            on: [(key, ChargeControlPolicy.paddedSMCBytes([enabledByte], to: key.dataSize))],
+            off: [(key, ChargeControlPolicy.paddedSMCBytes([0x00], to: key.dataSize))])
     }
 
     private static func namedKey(_ name: String, in client: SMCClient) -> SMCClient.Key? {

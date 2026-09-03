@@ -408,6 +408,7 @@ final class ChargeControlService: ObservableObject {
 
     private func applyGate(_ gate: ChargeControlGate) {
         guard accessState == .enabled else { return }
+        guard gate != lastAppliedGate || gate != appliedGate || error != nil else { return }
         guard !evaluationCoalescer.deferIfBusy(requestInFlight) else { return }
         let generation = beginRequest()
         let requestLimit = isToppingUp ? ChargeControlPolicy.maximumLimit : limitPercent
@@ -684,11 +685,12 @@ final class ChargeControlService: ObservableObject {
             return
         }
         let reading = sampler.sample()
+        let physicallyConnected = reading.externalConnected || reading.adapterMaxWatts != nil
         let stateChanged = isCharging != reading.isCharging
-            || externalConnected != reading.externalConnected
+            || externalConnected != physicallyConnected
         chargePercent = reading.chargePercent
         isCharging = reading.isCharging
-        externalConnected = reading.externalConnected
+        externalConnected = physicallyConnected
         if stateChanged || notifyMonitor { SystemMonitor.shared.powerStateDidChange() }
     }
 
