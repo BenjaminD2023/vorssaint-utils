@@ -178,7 +178,7 @@ enum ChargeControlPolicy {
         if chargePercent >= cap { return .inhibitCharging }
         if let sailingRange {
             let resumeBelow = cap - sanitizedSailingRange(sailingRange, limit: cap)
-            if wasInhibited && chargePercent >= resumeBelow { return .inhibitCharging }
+            if wasInhibited && chargePercent > resumeBelow { return .inhibitCharging }
         } else if wasInhibited && chargePercent > cap - hysteresis {
             return .inhibitCharging
         }

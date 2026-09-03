@@ -13669,7 +13669,7 @@ struct MetricsTests {
                                                mode: .limit, family: .appleSiliconCHT) == .inhibitCharging
                 && ChargeControlPolicy.desiredGate(chargePercent: 85, limit: 90,
                                                    sailingRange: 5, wasInhibited: true,
-                                                   mode: .limit, family: .appleSiliconCHT) == .inhibitCharging
+                                                   mode: .limit, family: .appleSiliconCHT) == .allowCharging
                 && ChargeControlPolicy.desiredGate(chargePercent: 84, limit: 90,
                                                    sailingRange: 5, wasInhibited: true,
                                                    mode: .limit, family: .appleSiliconCHT) == .allowCharging
@@ -13679,7 +13679,7 @@ struct MetricsTests {
                 && ChargeControlPolicy.desiredGate(chargePercent: 84, limit: 90,
                                                    sailingRange: 5, wasInhibited: true,
                                                    mode: .limit, family: .intelBCLM) == .allowCharging,
-               "a five-percent sailing range at 90 holds through 85 and resumes below it")
+               "a five-percent sailing range at 90 resumes at 85")
         expect(ChargeControlPolicy.desiredGate(chargePercent: 70, limit: 80,
                                                wasInhibited: false, mode: .limit,
                                                family: .intelBCLM) == .inhibitCharging,

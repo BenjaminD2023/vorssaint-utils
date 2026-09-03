@@ -136,7 +136,7 @@ struct ChargeLimitInlineAdjuster: View {
         }
         if service.isDischargingToLimit { return strings.discharging }
         if service.isToppingUp { return strings.toppingUp }
-        if service.appliedGate == .inhibitCharging { return strings.holding }
+        if service.isHolding { return strings.holding }
         if service.isCharging { return strings.charging }
         if !service.externalConnected { return strings.onBattery }
         return strings.notCharging
@@ -146,11 +146,11 @@ struct ChargeLimitInlineAdjuster: View {
         if service.appliedGate == .forceDischarge || service.isDischargingToLimit {
             return ChargeLimitPalette.discharge(for: colorScheme)
         }
+        if service.isHolding {
+            return ChargeLimitPalette.lime(for: colorScheme)
+        }
         if service.isToppingUp || service.isCharging {
             return ChargeLimitPalette.charging(for: colorScheme)
-        }
-        if service.appliedGate == .inhibitCharging {
-            return ChargeLimitPalette.lime(for: colorScheme)
         }
         return .secondary
     }
@@ -295,7 +295,8 @@ struct ChargeControlCardContent: View {
             Image(systemName: headerSymbol)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(statusColor)
-                .symbolEffect(.variableColor.iterative, options: .repeating, isActive: service.isCharging)
+                .symbolEffect(.variableColor.iterative, options: .repeating,
+                              isActive: service.isCharging && !service.isHolding)
                 .frame(width: 24)
             Text(statusText)
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
@@ -469,6 +470,7 @@ struct ChargeControlCardContent: View {
 
     private var headerSymbol: String {
         if service.isDischargingToLimit || service.appliedGate == .forceDischarge { return "battery.25" }
+        if service.isHolding { return "battery.75percent" }
         if service.isCharging || service.isToppingUp { return "battery.100.bolt" }
         return "battery.75percent"
     }
@@ -478,7 +480,7 @@ struct ChargeControlCardContent: View {
         if service.isDischargingToLimit { return strings.discharging }
         if service.isToppingUp { return strings.toppingUp }
         if !service.externalConnected { return strings.onBattery }
-        if service.appliedGate == .inhibitCharging { return strings.holding }
+        if service.isHolding { return strings.holding }
         if service.isCharging { return strings.charging }
         return strings.notCharging
     }
@@ -487,10 +489,10 @@ struct ChargeControlCardContent: View {
         if service.appliedGate == .forceDischarge || service.isDischargingToLimit {
             return ChargeLimitPalette.discharge(for: colorScheme)
         }
+        if service.isHolding { return ChargeLimitPalette.lime(for: colorScheme) }
         if service.isToppingUp || service.isCharging {
             return ChargeLimitPalette.charging(for: colorScheme)
         }
-        if service.appliedGate == .inhibitCharging { return ChargeLimitPalette.lime(for: colorScheme) }
         return .secondary
     }
 

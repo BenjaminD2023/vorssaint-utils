@@ -71,13 +71,23 @@ developer_id_identity() {
         | sed -E 's/.*"(.*)".*/\1/' || true
 }
 
+build_signing_identity() {
+    local identity
+    identity="$(developer_id_identity)"
+    if (( DEV )) && [[ -z "$identity" ]]; then
+        identity="$(security find-identity -v -p codesigning 2>/dev/null \
+            | grep 'Apple Development' | head -1 | sed -E 's/.*"(.*)".*/\1/' || true)"
+    fi
+    print -r -- "$identity"
+}
+
 # The Developer build exists for iterative local work, where an ad-hoc
 # signature is a trap: macOS ties Accessibility and Screen Recording grants to
 # the exact binary hash, so every rebuild orphans them while System Settings
 # keeps showing them as granted, and no new prompt ever appears. When no
 # identity is installed, create the stable local one up front instead of
 # falling through to ad-hoc — setup-signing.sh is free, offline and idempotent.
-if (( DEV )) && [[ -z "$(developer_id_identity)" ]] \
+if (( DEV )) && [[ -z "$(build_signing_identity)" ]] \
     && ! security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
     echo "▸ No signing identity installed; creating the stable local one…"
     if ! ./Tools/setup-signing.sh; then
@@ -133,18 +143,20 @@ finalize_installed_bundle_after_child() {
     local charge_helper="$bundle/Contents/Library/LaunchServices/$CHARGE_HELPER_ID"
     local adapter="$bundle/Contents/Frameworks/$NOW_PLAYING_ADAPTER"
     local devid
-    devid="$(developer_id_identity)"
+    devid="$(build_signing_identity)"
+    local identity_flags=(--options runtime --timestamp)
+    [[ "$devid" == "Apple Development:"* ]] && identity_flags=()
 
     echo "▸ Finalizing installed signature…"
     sleep 3
     if [[ -n "$devid" ]]; then
         [[ -f "$helper" ]] && codesign_with_timestamp_retry --force --strip-disallowed-xattrs \
-            --options runtime --timestamp --identifier "$FAN_HELPER_ID" --sign "$devid" "$helper"
+            "${identity_flags[@]}" --identifier "$FAN_HELPER_ID" --sign "$devid" "$helper"
         [[ -f "$charge_helper" ]] && codesign_with_timestamp_retry --force --strip-disallowed-xattrs \
-            --options runtime --timestamp --identifier "$CHARGE_HELPER_ID" --sign "$devid" "$charge_helper"
+            "${identity_flags[@]}" --identifier "$CHARGE_HELPER_ID" --sign "$devid" "$charge_helper"
         [[ -f "$adapter" ]] && codesign_with_timestamp_retry --force --strip-disallowed-xattrs \
-            --options runtime --timestamp --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$devid" "$adapter"
-        codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
+            "${identity_flags[@]}" --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$devid" "$adapter"
+        codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${identity_flags[@]}" \
             --entitlements "$ENTITLEMENTS" --sign "$devid" "$bundle"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         [[ -f "$helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
@@ -566,20 +578,20 @@ fi
 xattr -c -r "$STAGE" 2>/dev/null || true
 
 # Signing, in order of preference:
-#   1. Developer ID Application — the real, Apple-issued identity used for
-#      notarized releases. Signed with the hardened runtime (required for
-#      notarization), the app's entitlements and a secure timestamp. Gives a
-#      stable, team-based designated requirement, so permissions persist across
-#      updates AND Gatekeeper shows no "unverified developer" warning.
+#   1. Developer ID Application, or Apple Development for a Developer build.
+#      The stable team-based requirement preserves permissions across updates;
+#      Developer ID also enables the hardened runtime and secure timestamp.
 #   2. "Vorssaint Utils Signing" — the legacy stable self-signed identity, kept
 #      as a fallback so contributors without a Developer ID still get a constant
 #      designated requirement across their local builds.
 #   3. Ad-hoc — fresh clone with no identity at all.
-DEVID="$(developer_id_identity)"
+DEVID="$(build_signing_identity)"
+APPLE_SIGN_FLAGS=(--options runtime --timestamp)
+[[ "$DEVID" == "Apple Development:"* ]] && APPLE_SIGN_FLAGS=()
 codesign_app() {
     local target="$1"
     if [[ -n "$DEVID" ]]; then
-        codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
+        codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${APPLE_SIGN_FLAGS[@]}" \
             --entitlements "$ENTITLEMENTS" --sign "$DEVID" "$target"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$target"
@@ -592,7 +604,7 @@ codesign_named_helper() {
     local target="$1"
     local identifier="$2"
     if [[ -n "$DEVID" ]]; then
-        codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
+        codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${APPLE_SIGN_FLAGS[@]}" \
             --identifier "$identifier" --sign "$DEVID" "$target"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         codesign --force --strip-disallowed-xattrs --identifier "$identifier" \
@@ -605,7 +617,7 @@ codesign_named_helper() {
 codesign_now_playing_adapter() {
     local target="$1"
     if [[ -n "$DEVID" ]]; then
-        codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
+        codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${APPLE_SIGN_FLAGS[@]}" \
             --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$DEVID" "$target"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         codesign --force --strip-disallowed-xattrs --identifier "$NOW_PLAYING_ADAPTER_ID" \
@@ -622,7 +634,9 @@ sign_bundle() {
     local charge_helper="$bundle/Contents/Library/LaunchServices/$CHARGE_HELPER_ID"
     local adapter="$bundle/Contents/Frameworks/$NOW_PLAYING_ADAPTER"
 
-    if [[ -n "$DEVID" ]]; then
+    if [[ "$DEVID" == "Apple Development:"* ]]; then
+        echo "  signing with Apple Development identity: $DEVID"
+    elif [[ -n "$DEVID" ]]; then
         echo "  signing with Developer ID (hardened runtime): $DEVID"
     elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
         echo "  signing with legacy self-signed identity: $LEGACY_IDENTITY"

@@ -88,6 +88,20 @@ final class ChargeControlService: ObservableObject {
         return false
     }
 
+    var isHolding: Bool {
+        guard externalConnected else { return false }
+        if appliedGate == .inhibitCharging { return true }
+        guard enabled, sailingEnabled, accessState == .enabled, error == nil else { return false }
+        return ChargeControlPolicy.desiredGate(
+            chargePercent: chargePercent ?? 0,
+            limit: limitPercent,
+            sailingRange: sailingRangePercent,
+            wasInhibited: false,
+            mode: mode,
+            family: profile?.family ?? snapshot.profile?.family,
+            externalConnected: true) == .inhibitCharging
+    }
+
     var holdRemainingSeconds: TimeInterval? {
         guard case .calibration(let state) = mode else { return nil }
         return ChargeControlPolicy.holdRemaining(state: state, now: now)
@@ -100,15 +114,14 @@ final class ChargeControlService: ObservableObject {
 
     static func recoverIfNeeded() {
         guard UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded) else { return }
-        shared.restoreCharging()
+        let service = shared
+        guard !AppFeature.chargeControl.isAvailable || !service.enabled else { return }
+        service.restoreCharging()
     }
 
     func syncWithPreferences() {
         refreshFromDefaults()
         if AppFeature.chargeControl.isAvailable, hasBattery {
-            if UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded) {
-                restoreCharging()
-            }
             startTimerIfNeeded()
             refresh()
         } else {
@@ -633,7 +646,10 @@ final class ChargeControlService: ObservableObject {
                     UserDefaults.standard.set(current, forKey: DefaultsKey.chargeControlHelperVersion)
                     self.isWorking = false
                     self.refreshAccessState()
-                    if self.accessState == .enabled { self.requestStatus() }
+                    if self.accessState == .enabled {
+                        self.requestStatus()
+                        self.evaluate()
+                    }
                 } catch {
                     self.isWorking = false
                     self.refreshAccessState()
