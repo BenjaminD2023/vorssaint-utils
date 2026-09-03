@@ -13649,6 +13649,14 @@ struct MetricsTests {
                                                wasInhibited: false, mode: .limit,
                                                family: .appleSiliconCHT) == .inhibitCharging,
                "Apple Silicon stops charging at the cap")
+        expect(ChargeControlPolicy.desiredGate(chargePercent: 81, limit: 80,
+                                               wasInhibited: true, mode: .limit,
+                                               family: .appleSiliconCHT,
+                                               externalConnected: false) == .allowCharging
+                && ChargeControlPolicy.desiredGate(chargePercent: 79, limit: 80,
+                                                   wasInhibited: false, mode: .limit,
+                                                   family: .appleSiliconCHT) == .allowCharging,
+               "unplugging releases the gate so reconnecting below the cap charges immediately")
         expect(ChargeControlPolicy.desiredGate(chargePercent: 79, limit: 80,
                                                wasInhibited: true, mode: .limit,
                                                family: .appleSiliconCHT) == .inhibitCharging

@@ -3,6 +3,7 @@
 
 import AppKit
 import Foundation
+import IOKit.ps
 import IOKit.pwr_mgt
 import ServiceManagement
 
@@ -37,6 +38,7 @@ final class ChargeControlService: ObservableObject {
     private let probeQueue = DispatchQueue(label: "com.vorssaint.charge-control.probe", qos: .utility)
     private var connection: NSXPCConnection?
     private var timer: Timer?
+    private var powerSourceRunLoopSource: CFRunLoopSource?
     private var panelIsVisible = false
     private var requestInFlight = false
     private var requestGeneration = 0
@@ -59,9 +61,13 @@ final class ChargeControlService: ObservableObject {
     private init() {
         refreshFromDefaults()
         refreshAccessState()
+        installPowerSourceObserver()
     }
 
     deinit {
+        if let powerSourceRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
+        }
         connection?.invalidate()
         timer?.invalidate()
         releaseSleepAssertion()
@@ -341,9 +347,24 @@ final class ChargeControlService: ObservableObject {
             sailingRange: sailingEnabled ? sailingRangePercent : nil,
             wasInhibited: appliedGate == .inhibitCharging,
             mode: mode,
-            family: profile?.family ?? snapshot.profile?.family)
+            family: profile?.family ?? snapshot.profile?.family,
+            externalConnected: externalConnected)
         applyGate(gate)
         startTimerIfNeeded()
+    }
+
+    /// Release an old gate on unplug before the next connection negotiates power.
+    private func installPowerSourceObserver() {
+        guard hasBattery else { return }
+        let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        powerSourceRunLoopSource = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            let service = Unmanaged<ChargeControlService>.fromOpaque(context).takeUnretainedValue()
+            service.evaluate()
+        }, context)?.takeRetainedValue()
+        if let powerSourceRunLoopSource {
+            CFRunLoopAddSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
+        }
     }
 
     private func advanceCalibrationIfNeeded() {

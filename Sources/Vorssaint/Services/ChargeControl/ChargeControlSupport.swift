@@ -154,7 +154,9 @@ enum ChargeControlPolicy {
                             sailingRange: Int? = nil,
                             wasInhibited: Bool,
                             mode: ChargeControlMode,
-                            family: ChargeControlFamily?) -> ChargeControlGate {
+                            family: ChargeControlFamily?,
+                            externalConnected: Bool = true) -> ChargeControlGate {
+        guard externalConnected else { return .allowCharging }
         let cap = sanitizedLimit(limit)
         switch mode {
         case .calibration(let state):
