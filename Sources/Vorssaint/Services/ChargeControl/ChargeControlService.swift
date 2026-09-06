@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import AppKit
+import Combine
 import Foundation
 import IOKit.ps
 import IOKit.pwr_mgt
@@ -39,6 +40,7 @@ final class ChargeControlService: ObservableObject {
     private var connection: NSXPCConnection?
     private var timer: Timer?
     private var powerSourceRunLoopSource: CFRunLoopSource?
+    private var controllerStateObserver: AnyCancellable?
     private var panelIsVisible = false
     private var requestInFlight = false
     private var requestGeneration = 0
@@ -46,7 +48,9 @@ final class ChargeControlService: ObservableObject {
     private var registrationAttemptedVersion: String?
     private var didRequestAuthorization = false
     private var sleepAssertion: IOPMAssertionID = 0
-    private var lastAppliedGate: ChargeControlGate?
+    private var lastAppliedRequest: ChargeControlRequest?
+    private var connectionRevision = 0
+    private var inhibitedConnectionRevision = 0
 
     private static var appService: SMAppService {
         SMAppService.daemon(plistName: ChargeControlIdentifiers.plistName)
@@ -62,6 +66,11 @@ final class ChargeControlService: ObservableObject {
         refreshFromDefaults()
         refreshAccessState()
         installPowerSourceObserver()
+        controllerStateObserver = BatteryPowerStateMonitor.shared.$state.sink { [weak self] state in
+            guard let self else { return }
+            self.updateBatteryState(state)
+            self.evaluate(refreshBattery: self.chargePercent == nil)
+        }
     }
 
     deinit {
@@ -346,7 +355,7 @@ final class ChargeControlService: ObservableObject {
         let active = AppFeature.chargeControl.isAvailable && hasBattery && enabled
         let needsControl = active || isCalibrating || isDischargingToLimit || isToppingUp
         guard needsControl else {
-            if lastAppliedGate != .allowCharging || appliedGate != .allowCharging {
+            if lastAppliedRequest?.gate != .allowCharging || appliedGate != .allowCharging {
                 applyGate(.allowCharging)
             }
             releaseSleepAssertion()
@@ -358,7 +367,7 @@ final class ChargeControlService: ObservableObject {
             chargePercent: chargePercent ?? 0,
             limit: limitPercent,
             sailingRange: sailingEnabled ? sailingRangePercent : nil,
-            wasInhibited: appliedGate == .inhibitCharging,
+            wasInhibited: appliedGate == .inhibitCharging && inhibitedConnectionRevision == connectionRevision,
             mode: mode,
             family: profile?.family ?? snapshot.profile?.family,
             externalConnected: externalConnected)
@@ -408,11 +417,17 @@ final class ChargeControlService: ObservableObject {
 
     private func applyGate(_ gate: ChargeControlGate) {
         guard accessState == .enabled else { return }
-        guard gate != lastAppliedGate || gate != appliedGate || error != nil else { return }
+        // Always queue a trailing evaluation before deduplication: a request
+        // in flight can still be applying the opposite of the current intent.
         guard !evaluationCoalescer.deferIfBusy(requestInFlight) else { return }
-        let generation = beginRequest()
         let requestLimit = isToppingUp ? ChargeControlPolicy.maximumLimit : limitPercent
         let request = ChargeControlRequest(gate: gate, limitPercent: requestLimit)
+        guard request != lastAppliedRequest || gate != appliedGate || error != nil else {
+            if gate == .inhibitCharging { inhibitedConnectionRevision = connectionRevision }
+            return
+        }
+        let generation = beginRequest()
+        let requestConnectionRevision = connectionRevision
         if gate != .allowCharging {
             UserDefaults.standard.set(true, forKey: DefaultsKey.chargeControlRecoveryNeeded)
         }
@@ -426,8 +441,9 @@ final class ChargeControlService: ObservableObject {
             }
             self.apply(response)
             if response.succeeded {
-                self.lastAppliedGate = gate
+                self.lastAppliedRequest = request
                 self.appliedGate = gate
+                if gate == .inhibitCharging { self.inhibitedConnectionRevision = requestConnectionRevision }
                 if gate == .allowCharging {
                     UserDefaults.standard.removeObject(forKey: DefaultsKey.chargeControlRecoveryNeeded)
                 }
@@ -485,7 +501,7 @@ final class ChargeControlService: ObservableObject {
             }
             self.apply(response)
             if response.succeeded, response.snapshot.gate == .allowCharging {
-                self.lastAppliedGate = .allowCharging
+                self.lastAppliedRequest = ChargeControlRequest(gate: .allowCharging, limitPercent: self.limitPercent)
                 self.appliedGate = .allowCharging
                 UserDefaults.standard.removeObject(forKey: DefaultsKey.chargeControlRecoveryNeeded)
                 if !AppFeature.chargeControl.isAvailable { self.unregisterHelper() }
@@ -684,14 +700,29 @@ final class ChargeControlService: ObservableObject {
             externalConnected = false
             return
         }
-        let reading = sampler.sample()
-        let physicallyConnected = reading.externalConnected || reading.adapterMaxWatts != nil
+        var reading = sampler.sample()
+        let state = BatteryPowerStateMonitor.shared.state
+        state.apply(to: &reading)
+        let physicallyConnected = state.adapterConnected
+            ?? (reading.externalConnected || reading.adapterMaxWatts != nil)
         let stateChanged = isCharging != reading.isCharging
             || externalConnected != physicallyConnected
         chargePercent = reading.chargePercent
         isCharging = reading.isCharging
-        externalConnected = physicallyConnected
+        updateConnection(physicallyConnected)
         if stateChanged || notifyMonitor { SystemMonitor.shared.powerStateDidChange() }
+    }
+
+    private func updateBatteryState(_ state: BatteryPowerState) {
+        if let connected = state.adapterConnected { updateConnection(connected) }
+        isCharging = state.resolve(externalConnected: externalConnected, isCharging: isCharging).isCharging
+    }
+
+    private func updateConnection(_ connected: Bool) {
+        // A new cable session must not inherit sailing/hysteresis from the
+        // previous one, including an inhibit request that was still in flight.
+        if externalConnected && !connected { connectionRevision &+= 1 }
+        externalConnected = connected
     }
 
     private func refreshFromDefaults() {
@@ -728,7 +759,7 @@ final class ChargeControlService: ObservableObject {
         guard panelIsVisible || active
                 || UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded) else { return }
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: ChargeControlPolicy.pollInterval, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: ChargeControlPolicy.pollInterval, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.now = Date()
             if self.accessState != .enabled {
@@ -738,6 +769,8 @@ final class ChargeControlService: ObservableObject {
             if self.appliedGate != .allowCharging { self.heartbeat() }
             self.evaluate()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     private func stopIdleWorkIfPossible() {

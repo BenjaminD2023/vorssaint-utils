@@ -146,9 +146,15 @@ enum MenuBarBatterySupport {
         empty.draw(in: rect)
 
         if isCharging,
-           let bolt = makeMonochromeSymbol(named: "bolt.fill", pointSize: 11, color: .white) {
-            if fillFraction(percent) < 0.35 {
-                drawCentered(bolt, in: rect.offsetBy(dx: -2, dy: 0))
+           let bolt = makeMonochromeSymbol(named: "bolt.fill", pointSize: 11, color: outlineColor) {
+            if fillFraction(percent) < 0.75 {
+                let centered = rect.offsetBy(dx: -2, dy: 0)
+                // Until the fill covers the whole bolt, a cutout erases part
+                // of its shape. Use the foreground with clearance from the fill.
+                if let cutout = makeMonochromeSymbol(named: "bolt.fill", pointSize: 15, color: .white) {
+                    drawCentered(cutout, in: centered, operation: .destinationOut)
+                }
+                drawCentered(bolt, in: centered)
             } else {
                 drawCentered(bolt, in: rect.offsetBy(dx: -2, dy: 0), operation: .destinationOut)
             }

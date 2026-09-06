@@ -191,6 +191,7 @@ final class SystemMonitor: ObservableObject {
     private var batteryNotificationPort: IONotificationPortRef?
     private var batteryInterestNotification: io_object_t = 0
     private var powerStateObserver: NSObjectProtocol?
+    private var controllerStateObserver: AnyCancellable?
 
     private init() {
         cpuHistory = MetricHistory(capacity: historyCapacity)
@@ -207,6 +208,13 @@ final class SystemMonitor: ObservableObject {
             installPowerSourceObserver()
             installBatteryRegistryObserver()
             installLowPowerModeObserver()
+            controllerStateObserver = BatteryPowerStateMonitor.shared.$state.sink { [weak self] state in
+                guard let self, self.shouldRun, self.currentPlan(defaults: .standard).needPower,
+                      var power = self.snapshot.power else { return }
+                state.apply(to: &power)
+                self.powerStateRevision &+= 1
+                self.snapshot.power = power
+            }
         }
     }
 
@@ -305,6 +313,7 @@ final class SystemMonitor: ObservableObject {
         power.chargePercent = battery.percent
         power.isCharging = battery.isCharging
         power.externalConnected = battery.externalConnected
+        BatteryPowerStateMonitor.shared.state.apply(to: &power)
         snapshot.power = power
     }
 
@@ -912,6 +921,12 @@ final class SystemMonitor: ObservableObject {
                 if powerStateRevision != self.powerStateRevision,
                    let battery = SystemInfo.batteryRegistrySnapshot() ?? SystemInfo.batterySnapshot() {
                     Self.applyBatteryState(battery, to: &publishedSnapshot)
+                }
+                // A queued/full sample must never put cached driver flags back
+                // over a newer controller reading, even at the same revision.
+                if var power = publishedSnapshot.power {
+                    BatteryPowerStateMonitor.shared.state.apply(to: &power)
+                    publishedSnapshot.power = power
                 }
                 // Skip pure carry-over publishes (nothing sampled, same plan,
                 // same mode): the values are identical to the ones on screen.

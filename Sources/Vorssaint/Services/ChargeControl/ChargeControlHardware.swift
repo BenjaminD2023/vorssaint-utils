@@ -125,6 +125,9 @@ final class ChargeControlHardware {
 
     private func write(_ key: SMCClient.Key, bytes: [UInt8], attempts: Int = 3) -> Bool {
         let payload = ChargeControlPolicy.paddedSMCBytes(bytes, to: key.dataSize)
+        // Writing an unchanged adapter/discharge flag can still cause a power
+        // renegotiation. Only touch the controller when the value must change.
+        if client.readBytes(key) == payload { return true }
         for attempt in 0..<attempts {
             do {
                 try client.writeBytes(payload, to: key)

@@ -3499,6 +3499,34 @@ struct MetricsTests {
                                                                    lowPowerMode: false)
         expect(chargingHighBattery.tiffRepresentation != pluggedHighBattery.tiffRepresentation,
                "battery glyph reflects a charging-state change at the same level")
+        for percent in [0, 20, 34, 35, 50, 74] {
+            for tint in [NSColor.black, NSColor.white] {
+                let glyph = MenuBarBatterySupport.glyphImage(percent: percent,
+                                                              isCharging: true,
+                                                              isPluggedIn: true,
+                                                              lowPowerMode: false,
+                                                              tint: tint)
+                if let data = glyph.tiffRepresentation,
+                   let bitmap = NSBitmapImageRep(data: data) {
+                    var foregroundPixels = 0
+                    var wrongColorPixels = 0
+                    for x in 0..<bitmap.pixelsWide {
+                        for y in 0..<bitmap.pixelsHigh {
+                            guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+                                  color.alphaComponent > 0.5 else { continue }
+                            foregroundPixels += 1
+                            if abs(color.redComponent - (tint == .black ? 0 : 1)) > 0.1 {
+                                wrongColorPixels += 1
+                            }
+                        }
+                    }
+                    expect(foregroundPixels > 0 && wrongColorPixels == 0,
+                           "low-charge bolt uses the foreground tint at \(percent)% without a white-on-light bolt")
+                } else {
+                    expect(false, "low-charge glyph can be rasterized")
+                }
+            }
+        }
         expectClose(Double(MenuBarBatterySupport.fillFraction(63)), 0.63,
                     "native battery fill follows the live charge")
         expectClose(Double(MenuBarBatterySupport.fillFraction(150)), 1,
@@ -13645,6 +13673,45 @@ struct MetricsTests {
                 && evaluationCoalescer.consumePending()
                 && !evaluationCoalescer.consumePending(),
                "charge-control request bursts produce one trailing evaluation")
+        expect(BatteryPowerState.adapterConnected(bytes: [0xFF]) == false
+                && BatteryPowerState.adapterConnected(bytes: [0]) == true
+                && BatteryPowerState.adapterConnected(bytes: [2]) == true,
+               "the physical adapter flag distinguishes unplugged from every valid port, including zero")
+        expect(BatteryPowerState.adapterConnected(bytes: nil) == nil
+                && BatteryPowerState.adapterConnected(bytes: []) == nil
+                && BatteryPowerState.adapterConnected(bytes: [0, 0]) == nil
+                && BatteryPowerState.adapterConnected(bytes: [0xFE]) == nil,
+               "missing or invalid physical adapter flags fall back to system telemetry")
+        expect(BatteryPowerState.flag(bytes: [0]) == false
+                && BatteryPowerState.flag(bytes: [1]) == true
+                && BatteryPowerState.flag(bytes: [8], enabledValue: 8) == true
+                && BatteryPowerState.flag(bytes: [2]) == nil
+                && BatteryPowerState.flag(bytes: nil) == nil
+                && BatteryPowerState.flag(bytes: [1, 0]) == nil,
+               "controller flags accept only the known one-byte encodings")
+        let liveCharging = BatteryPowerState(adapterConnected: true, isCharging: true)
+            .resolve(externalConnected: false, isCharging: false)
+        expect(liveCharging.externalConnected && liveCharging.isCharging,
+               "live charging immediately supersedes stale unplugged driver flags")
+        let liveHolding = BatteryPowerState(adapterConnected: true, isCharging: false)
+            .resolve(externalConnected: true, isCharging: true)
+        expect(liveHolding.externalConnected && !liveHolding.isCharging,
+               "live holding immediately supersedes stale charging driver flags")
+        let liveUnplugged = BatteryPowerState(adapterConnected: false, isCharging: true)
+            .resolve(externalConnected: true, isCharging: true)
+        expect(!liveUnplugged.externalConnected && !liveUnplugged.isCharging,
+               "unplugging clears charging even before the controller charging flag settles")
+        let forcedState = BatteryPowerState(adapterConnected: true, isCharging: false, isDischarging: true)
+        let liveDischarging = forcedState.resolve(externalConnected: true, isCharging: true)
+        expect(forcedState.adapterConnected == true
+                && !liveDischarging.externalConnected && !liveDischarging.isCharging,
+               "forced discharge keeps physical presence separate from battery-powered state")
+        let fallbackState = BatteryPowerState().resolve(externalConnected: true, isCharging: false)
+        expect(fallbackState.externalConnected && !fallbackState.isCharging,
+               "unsupported controller keys preserve system-reported holding")
+        expect(ChargeControlRequest(gate: .inhibitCharging, limitPercent: 60)
+                != ChargeControlRequest(gate: .inhibitCharging, limitPercent: 80),
+               "request deduplication distinguishes Intel firmware limits with the same gate")
         expect(ChargeControlPolicy.desiredGate(chargePercent: 81, limit: 80,
                                                wasInhibited: false, mode: .limit,
                                                family: .appleSiliconCHT) == .inhibitCharging,

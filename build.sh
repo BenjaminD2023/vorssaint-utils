@@ -280,6 +280,7 @@ if (( TEST )); then
         Sources/Vorssaint/Core/ChargeControlStrings.swift \
         Sources/Vorssaint/Services/FanControl/FanControlSupport.swift \
         Sources/Vorssaint/Services/ChargeControl/ChargeControlSupport.swift \
+        Sources/Vorssaint/Services/Metrics/BatteryPowerStateSupport.swift \
         Sources/Vorssaint/Services/Snippets/TextSnippetSupport.swift \
         Sources/Vorssaint/Services/RadialMenu/RadialMenuSupport.swift \
         Sources/Vorssaint/Services/QuickTools/ScratchpadSupport.swift \
@@ -414,6 +415,12 @@ if (( TEST )); then
     # `set -e` would end the script on a failing run before the sweep below.
     test_status=0
     ./build/metrics-tests || test_status=$?
+    swiftc -Onone -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" \
+        Sources/Vorssaint/Services/ChargeControl/ChargeControlSupport.swift \
+        Sources/Vorssaint/Services/ChargeControl/ChargeControlHardware.swift \
+        Tests/ChargeControlHardwareTests.swift \
+        -o build/charge-hardware-tests
+    ./build/charge-hardware-tests || test_status=$?
     discard_test_preferences || test_status=1
     exit $test_status
 fi
