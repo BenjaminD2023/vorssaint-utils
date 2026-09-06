@@ -81,14 +81,34 @@ build_signing_identity() {
     print -r -- "$identity"
 }
 
-# The Developer build exists for iterative local work, where an ad-hoc
-# signature is a trap: macOS ties Accessibility and Screen Recording grants to
-# the exact binary hash, so every rebuild orphans them while System Settings
-# keeps showing them as granted, and no new prompt ever appears. When no
-# identity is installed, create the stable local one up front instead of
-# falling through to ad-hoc — setup-signing.sh is free, offline and idempotent.
-if (( DEV )) && [[ -z "$(build_signing_identity)" ]] \
-    && ! security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+# A find-identity listing also names certificates codesign then rejects (an
+# expired one fails the build with errSecInternalComponent), and -v excludes
+# every self-signed one; ask codesign itself with a throwaway copy of /bin/echo.
+legacy_identity_installed() {
+    local probe signed=1
+    # A locked keychain still lists its identities but cannot sign with them,
+    # and this one is locked after every reboot; unlock it before asking.
+    security unlock-keychain -p vorssaint-signing \
+        "$HOME/Library/Keychains/vorssaint-signing.keychain-db" 2>/dev/null || true
+    probe="$(mktemp)"
+    cp /bin/echo "$probe"
+    /usr/bin/codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$probe" \
+        >/dev/null 2>&1 && signed=0
+    rm -f "$probe"
+    return $signed
+}
+
+# Any build that lands in /Applications needs a stable signature, not just the
+# Developer one: macOS ties Accessibility and Screen Recording grants to the
+# exact binary hash, so an ad-hoc rebuild orphans them while System Settings
+# keeps showing them as granted, and no new prompt ever appears. A plain
+# --install strands them under the released bundle id, on the app the user
+# actually relies on. When no identity is installed, create the stable local one
+# up front instead of falling through to ad-hoc — setup-signing.sh is free,
+# offline and idempotent. Gating on the install rather than the variant keeps
+# this off CI, where neither ci.yml nor release.yml passes --install.
+if (( DEV || INSTALL )) && [[ -z "$(build_signing_identity)" ]] \
+    && ! legacy_identity_installed; then
     echo "▸ No signing identity installed; creating the stable local one…"
     if ! ./Tools/setup-signing.sh; then
         echo "  ⚠ Tools/setup-signing.sh failed; signing ad-hoc instead." >&2
@@ -158,7 +178,7 @@ finalize_installed_bundle_after_child() {
             "${identity_flags[@]}" --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$devid" "$adapter"
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${identity_flags[@]}" \
             --entitlements "$ENTITLEMENTS" --sign "$devid" "$bundle"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         [[ -f "$helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
             --identifier "$FAN_HELPER_ID" --sign "$LEGACY_IDENTITY" "$helper"
         [[ -f "$charge_helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
@@ -294,10 +314,13 @@ if (( TEST )); then
         Sources/Vorssaint/Services/Recorder/RecorderTypingTrack.swift \
         Sources/Vorssaint/Services/Recorder/RecorderTimeline.swift \
         Sources/Vorssaint/Services/Recorder/RecorderTextOverlay.swift \
+        Sources/Vorssaint/Services/Recorder/RecorderImageOverlay.swift \
         Sources/Vorssaint/Services/Recorder/RecorderBlurRegion.swift \
         Sources/Vorssaint/Services/Recorder/RecorderEditDocument.swift \
         Sources/Vorssaint/Core/AppInfo.swift \
         Sources/Vorssaint/Core/GlobalShortcut.swift \
+        Sources/Vorssaint/Core/SymbolicHotKeys.swift \
+        Sources/Vorssaint/Services/SystemShortcutTakeoverSupport.swift \
         Sources/Vorssaint/Core/Localization.swift \
         Sources/Vorssaint/Core/Localizations/Strings+*.swift \
         Sources/Vorssaint/Core/FeatureStrings.swift \
@@ -317,6 +340,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/DockPreview/DockPreviewSupport.swift \
         Sources/Vorssaint/Services/Homebrew/HomebrewSupport.swift \
         Sources/Vorssaint/Services/AppUpdates/AppUpdatesSupport.swift \
+        Sources/Vorssaint/Services/AppUpdates/AppUpdateFeedSupport.swift \
         Sources/Vorssaint/Core/AppUpdateStrings.swift \
         Sources/Vorssaint/Core/DiskImageInstallerStrings.swift \
         Sources/Vorssaint/Services/DiskImageInstaller/DiskImageInstallerSupport.swift \
@@ -393,6 +417,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/ShellSupport.swift \
         Sources/Vorssaint/Services/Metrics/NetworkProcessSupport.swift \
         Sources/Vorssaint/Services/Metrics/NetworkSampler.swift \
+        Sources/Vorssaint/Services/Metrics/SpeedTest.swift \
         Sources/Vorssaint/Services/Metrics/PeripheralBatterySupport.swift \
         Sources/Vorssaint/Services/Metrics/DiskSupport.swift \
         Sources/Vorssaint/Services/Metrics/MonitorSamplingPolicy.swift \
@@ -411,6 +436,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/Uninstall/UninstallerSupport.swift \
         Sources/Vorssaint/Services/ManagedDownloads/WhatsAppDownloadSupport.swift \
         Tests/MetricsTests.swift \
+        Tests/SpeedTestTests.swift \
         -o build/metrics-tests
     # `set -e` would end the script on a failing run before the sweep below.
     test_status=0
@@ -600,7 +626,7 @@ codesign_app() {
     if [[ -n "$DEVID" ]]; then
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${APPLE_SIGN_FLAGS[@]}" \
             --entitlements "$ENTITLEMENTS" --sign "$DEVID" "$target"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$target"
     else
         codesign --force --strip-disallowed-xattrs --sign - "$target"
@@ -613,7 +639,7 @@ codesign_named_helper() {
     if [[ -n "$DEVID" ]]; then
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${APPLE_SIGN_FLAGS[@]}" \
             --identifier "$identifier" --sign "$DEVID" "$target"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         codesign --force --strip-disallowed-xattrs --identifier "$identifier" \
             --sign "$LEGACY_IDENTITY" "$target"
     else
@@ -626,7 +652,7 @@ codesign_now_playing_adapter() {
     if [[ -n "$DEVID" ]]; then
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs "${APPLE_SIGN_FLAGS[@]}" \
             --identifier "$NOW_PLAYING_ADAPTER_ID" --sign "$DEVID" "$target"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         codesign --force --strip-disallowed-xattrs --identifier "$NOW_PLAYING_ADAPTER_ID" \
             --sign "$LEGACY_IDENTITY" "$target"
     else
@@ -645,7 +671,7 @@ sign_bundle() {
         echo "  signing with Apple Development identity: $DEVID"
     elif [[ -n "$DEVID" ]]; then
         echo "  signing with Developer ID (hardened runtime): $DEVID"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         echo "  signing with legacy self-signed identity: $LEGACY_IDENTITY"
     else
         echo "  signing ad-hoc (no identity installed — run Tools/setup-signing.sh)"

@@ -132,7 +132,7 @@ extension MenuBarAppearanceStrings {
         label: "Visualizzazione utilizzo",
         values: "Valori",
         bars: "Barre",
-        caption: "L'utilizzo di CPU, GPU, memoria e disco, la batteria e le batterie degli accessori possono essere mostrati come valori o barre per ciascuno. Le altre letture restano numeriche.",
+        caption: "L’utilizzo di CPU, GPU, memoria e disco, la batteria e le batterie degli accessori possono essere mostrati come valori o barre per ciascuno. Le altre letture restano numeriche.",
         customize: "Colori e soglie delle barre",
         normalColor: "Colore normale",
         mediumColor: "Colore medio",

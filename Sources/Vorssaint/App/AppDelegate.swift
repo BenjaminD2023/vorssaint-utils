@@ -118,6 +118,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
         FanControlService.recoverIfNeeded()
         ChargeControlService.recoverIfNeeded()
+        // A marker from an earlier build may name a hotkey id this build no
+        // longer owns; give it back before any feature decides what to hold,
+        // except the ids the switcher is about to take over again, which stay
+        // off rather than flipping on and back.
+        SystemShortcutTakeover.recoverIfNeeded(keeping: AppSwitcher.launchTakeoverIDs())
         // One binding per feature: only available features are touched, so a
         // feature switched off in the hub never even instantiates here.
         FeatureRuntime.shared.syncAtLaunch()
@@ -1515,13 +1520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     /// Quits and reopens the app. Full Disk Access only applies to a fresh
     /// process, so this is how the uninstaller picks up a just-granted grant.
     func relaunchApp() {
-        let path = Bundle.main.bundlePath
-        // Its own session: the reopen fires after we terminate, so the child
-        // has to outlive the session it was started from.
-        _ = try? DetachedProcess.spawn(
-            "/bin/sh",
-            ["-c", "sleep 0.3; /usr/bin/open \"$1\"", "vorssaint-relaunch", path])
-        NSApp.terminate(nil)
+        FeatureRuntime.shared.relaunchApp()
     }
 
     func showOnboarding(mode: OnboardingMode = .full) {
@@ -1576,7 +1575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         return true
     }
 
-    func showUpdateHighlights(includeSupportIntro: Bool = false) {
+    func showUpdateHighlights() {
         closePopover()
         if let window = updateHighlightsWindow {
             NSApp.activate(ignoringOtherApps: true)
@@ -1588,13 +1587,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                 guard let self else { return }
                 self.markUpdateHighlightsSeen()
                 self.updateHighlightsWindow?.close()
-                DispatchQueue.main.async { [weak self] in
-                    if includeSupportIntro {
-                        self?.showSupportUpdateIntro()
-                    } else {
-                        _ = self?.showSupportUpdateIntroIfNeeded()
-                    }
-                }
             }
         ))
         host.sizingOptions = .preferredContentSize
@@ -1697,7 +1689,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         ))
         host.sizingOptions = .preferredContentSize
         let window = NSWindow(contentViewController: host)
-        window.title = L10n.shared.s.discordIntroTitle
+        window.title = L10n.shared.s.supportIntroTitle
         window.styleMask = [.titled, .fullSizeContentView]
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.titlebarAppearsTransparent = true
