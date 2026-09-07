@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Summary
+Screenshot previews can optionally accept keyboard shortcuts as soon as they appear.
+
+### Added
+- Screenshot previews can take keyboard focus automatically when enabled in More options. Thanks to @santi-ug.
+
 ## [3.3.5] - 2026-09-06
 
 ### Summary
