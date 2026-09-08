@@ -61,6 +61,30 @@ enum ChargeControlHardwareTests {
                      "a failed discharge transition must not also change charging")
         SMCClient.failingKey = nil
 
+        precondition(hardware.apply(gate: .forceDischarge, limit: 80))
+        SMCClient.writes = []
+        precondition(hardware.apply(gate: .allowCharging, limit: 100))
+        precondition(SMCClient.writes.map(\.0) == ["CHIE", "CHTE"],
+                     "top up exits discharge before opening the charging gate")
+        precondition(!hardware.isForceDischarging && SMCClient.values["CHTE"] == [0, 0, 0, 0])
+        precondition(hardware.apply(gate: .allowCharging, limit: 100))
+        precondition(SMCClient.writes.count == 2, "top up must not repeatedly renegotiate power")
+
+        SMCClient.values = ["CHIE": [0]]
+        SMCClient.writes = []
+        guard let native = ChargeControlHardware() else { fatalError("missing native discharge hardware") }
+        precondition(native.profile.family == .nativePowerUI && !native.profile.supportsInhibit)
+        precondition(native.profile.supportsDischarge)
+        precondition(!native.apply(gate: .inhibitCharging, limit: 90) && SMCClient.writes.isEmpty,
+                     "the helper must not pretend it can enforce a native charge limit")
+        precondition(native.apply(gate: .forceDischarge, limit: 90))
+        precondition(native.apply(gate: .forceDischarge, limit: 85))
+        precondition(SMCClient.writes.count == 1 && SMCClient.values["CHIE"] == [8],
+                     "native discharge must not cycle adapter power")
+        precondition(native.restoreNormal())
+        precondition(native.restoreNormal())
+        precondition(SMCClient.writes.map(\.0) == ["CHIE", "CHIE"] && SMCClient.values["CHIE"] == [0])
+
         SMCClient.values = ["BCLM": [100], "ACEN": [1]]
         SMCClient.writes = []
         guard let intel = ChargeControlHardware() else { fatalError("missing Intel test hardware") }

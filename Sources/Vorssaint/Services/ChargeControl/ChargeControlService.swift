@@ -7,6 +7,7 @@ import Foundation
 import IOKit.ps
 import IOKit.pwr_mgt
 import ServiceManagement
+import NativeChargeControl
 
 final class ChargeControlService: ObservableObject {
     enum AccessState: Equatable {
@@ -34,6 +35,10 @@ final class ChargeControlService: ObservableObject {
     @Published private(set) var mode: ChargeControlMode = .limit
     @Published private(set) var appliedGate: ChargeControlGate = .allowCharging
     @Published private(set) var now = Date()
+    @Published private(set) var nativeChargingAvailable = false
+
+    var usesNativeCharging: Bool { nativeChargingAvailable && profile?.family == .nativePowerUI }
+    var minimumSupportedLimit: Int { usesNativeCharging ? 80 : ChargeControlPolicy.minimumLimit }
 
     private let sampler = PowerSampler(smc: SMCClient())
     private let probeQueue = DispatchQueue(label: "com.vorssaint.charge-control.probe", qos: .utility)
@@ -71,6 +76,14 @@ final class ChargeControlService: ObservableObject {
             self.updateBatteryState(state)
             self.evaluate(refreshBattery: self.chargePercent == nil)
         }
+        probeQueue.async { [weak self] in
+            let available = VSNativeChargeLimit() >= 0
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.nativeChargingAvailable = available
+                self.refresh()
+            }
+        }
     }
 
     deinit {
@@ -99,8 +112,14 @@ final class ChargeControlService: ObservableObject {
 
     var isHolding: Bool {
         guard externalConnected else { return false }
+        if usesNativeCharging {
+            return enabled && error == nil && !isCharging && !isDischargingToLimit && !isToppingUp
+                && lastAppliedRequest?.limitPercent == limitPercent
+                && (chargePercent ?? 0) >= limitPercent
+        }
         if appliedGate == .inhibitCharging { return true }
-        guard enabled, sailingEnabled, accessState == .enabled, error == nil else { return false }
+        guard enabled, sailingEnabled, accessState == .enabled,
+              profile?.supportsInhibit == true, error == nil else { return false }
         return ChargeControlPolicy.desiredGate(
             chargePercent: chargePercent ?? 0,
             limit: limitPercent,
@@ -225,7 +244,8 @@ final class ChargeControlService: ObservableObject {
     }
 
     func setLimit(_ percent: Int) {
-        let cap = ChargeControlPolicy.sanitizedLimit(percent)
+        let cap = usesNativeCharging ? min(100, max(80, Int((Double(percent) / 5).rounded()) * 5))
+            : ChargeControlPolicy.sanitizedLimit(percent)
         UserDefaults.standard.set(cap, forKey: DefaultsKey.chargeLimitPercent)
         limitPercent = cap
         setSailingRange(sailingRangePercent, evaluateAfterChange: false)
@@ -245,11 +265,10 @@ final class ChargeControlService: ObservableObject {
     }
 
     func startDischargeToLimit() {
-        guard profile?.supportsDischarge == true,
-              let charge = chargePercent, charge > limitPercent else { return }
+        guard hasBattery, profile?.supportsDischarge == true else { return }
         guard accessState == .enabled else { authorize(); return }
         mode = .dischargeToLimit
-        takeSleepAssertion()
+        releaseSleepAssertion()
         evaluate()
     }
 
@@ -261,7 +280,9 @@ final class ChargeControlService: ObservableObject {
     }
 
     func startTopUp() {
-        guard limitPercent < ChargeControlPolicy.maximumLimit,
+        guard profile?.supportsInhibit == true,
+              externalConnected,
+              limitPercent < ChargeControlPolicy.maximumLimit,
               (chargePercent ?? 0) < ChargeControlPolicy.maximumLimit else { return }
         guard accessState == .enabled else { authorize(); return }
         mode = .topUp
@@ -349,25 +370,24 @@ final class ChargeControlService: ObservableObject {
     private func evaluate(refreshBattery: Bool = true) {
         if refreshBattery { sampleBattery() }
         advanceCalibrationIfNeeded()
-        settleDischargeIfNeeded()
         settleTopUpIfNeeded()
 
         let active = AppFeature.chargeControl.isAvailable && hasBattery && enabled
         let needsControl = active || isCalibrating || isDischargingToLimit || isToppingUp
         guard needsControl else {
-            if lastAppliedRequest?.gate != .allowCharging || appliedGate != .allowCharging {
+            if usesNativeCharging || lastAppliedRequest?.gate != .allowCharging || appliedGate != .allowCharging {
                 applyGate(.allowCharging)
             }
             releaseSleepAssertion()
             stopIdleWorkIfPossible()
             return
         }
-        guard accessState == .enabled else { return }
+        guard accessState == .enabled, !isWorking else { return }
         let gate = ChargeControlPolicy.desiredGate(
             chargePercent: chargePercent ?? 0,
             limit: limitPercent,
-            sailingRange: sailingEnabled ? sailingRangePercent : nil,
-            wasInhibited: appliedGate == .inhibitCharging && inhibitedConnectionRevision == connectionRevision,
+            sailingRange: sailingEnabled && !usesNativeCharging ? sailingRangePercent : nil,
+            wasInhibited: !usesNativeCharging && appliedGate == .inhibitCharging && inhibitedConnectionRevision == connectionRevision,
             mode: mode,
             family: profile?.family ?? snapshot.profile?.family,
             externalConnected: externalConnected)
@@ -400,14 +420,6 @@ final class ChargeControlService: ObservableObject {
         }
     }
 
-    private func settleDischargeIfNeeded() {
-        guard isDischargingToLimit, let charge = chargePercent else { return }
-        if charge <= limitPercent {
-            mode = .limit
-            releaseSleepAssertion()
-        }
-    }
-
     private func settleTopUpIfNeeded() {
         guard isToppingUp, let charge = chargePercent else { return }
         if charge >= ChargeControlPolicy.maximumLimit {
@@ -417,6 +429,7 @@ final class ChargeControlService: ObservableObject {
 
     private func applyGate(_ gate: ChargeControlGate) {
         guard accessState == .enabled else { return }
+        if usesNativeCharging { applyNativeGate(gate); return }
         // Always queue a trailing evaluation before deduplication: a request
         // in flight can still be applying the opposite of the current intent.
         guard !evaluationCoalescer.deferIfBusy(requestInFlight) else { return }
@@ -451,6 +464,48 @@ final class ChargeControlService: ObservableObject {
         }
     }
 
+    private func applyNativeGate(_ gate: ChargeControlGate) {
+        guard !evaluationCoalescer.deferIfBusy(requestInFlight) else { return }
+        let active = AppFeature.chargeControl.isAvailable && enabled
+        let full = isToppingUp || !active || (isCalibrating && calibrationPhase != .restoringLimit)
+        let target = full ? 100 : min(100, max(80, Int((Double(limitPercent) / 5).rounded()) * 5))
+        let request = ChargeControlRequest(gate: gate, limitPercent: target)
+        guard request != lastAppliedRequest || gate != appliedGate || error != nil else { return }
+        let generation = beginRequest()
+        let helperGate: ChargeControlGate = gate == .forceDischarge ? .forceDischarge : .allowCharging
+        let helperRequest = ChargeControlRequest(gate: helperGate, limitPercent: target)
+
+        // Set the native cap before discharge. It remains enforced when the
+        // adapter is restored at the target, avoiding charge/discharge cycling.
+        probeQueue.async { [weak self] in
+            let succeeded = VSNativeSetChargeLimit(Int32(target))
+            DispatchQueue.main.async {
+                guard let self, generation == self.requestGeneration else { return }
+                guard succeeded else {
+                    if self.finishRequest(generation) { self.error = .controlFailed }
+                    return
+                }
+                if helperGate == .forceDischarge {
+                    UserDefaults.standard.set(true, forKey: DefaultsKey.chargeControlRecoveryNeeded)
+                }
+                self.send { proxy, reply in
+                    proxy.apply(ChargeControlIPC.encode(helperRequest), withReply: reply)
+                } completion: { response in
+                    guard self.finishRequest(generation) else { return }
+                    guard let response else { self.error = .helperUnavailable; return }
+                    self.apply(response)
+                    guard response.succeeded else { return }
+                    self.lastAppliedRequest = request
+                    self.appliedGate = gate
+                    if helperGate == .allowCharging {
+                        UserDefaults.standard.removeObject(forKey: DefaultsKey.chargeControlRecoveryNeeded)
+                    }
+                    self.sampleBattery(notifyMonitor: true)
+                }
+            }
+        }
+    }
+
     private func requestStatus() {
         guard !requestInFlight else { return }
         let generation = beginRequest()
@@ -469,6 +524,7 @@ final class ChargeControlService: ObservableObject {
     }
 
     private func heartbeat() {
+        if usesNativeCharging && appliedGate != .forceDischarge { return }
         guard appliedGate != .allowCharging, !requestInFlight, !isWorking else { return }
         let generation = beginRequest()
         send { proxy, reply in proxy.heartbeat(withReply: reply) } completion: { response in
@@ -492,7 +548,8 @@ final class ChargeControlService: ObservableObject {
         guard accessState == .enabled else { return }
         let generation = beginRequest()
         isWorking = true
-        send { proxy, reply in proxy.restoreNormal(withReply: reply) } completion: { response in
+        let restoreAdapter = {
+        self.send { proxy, reply in proxy.restoreNormal(withReply: reply) } completion: { response in
             guard self.finishRequest(generation) else { return }
             self.isWorking = false
             guard let response else {
@@ -507,6 +564,24 @@ final class ChargeControlService: ObservableObject {
                 if !AppFeature.chargeControl.isAvailable { self.unregisterHelper() }
                 self.stopIdleWorkIfPossible()
             }
+        }
+        }
+        if usesNativeCharging {
+            probeQueue.async {
+                let restored = VSNativeSetChargeLimit(100)
+                DispatchQueue.main.async {
+                    guard generation == self.requestGeneration else { return }
+                    guard restored else {
+                        _ = self.finishRequest(generation)
+                        self.isWorking = false
+                        self.error = .controlFailed
+                        return
+                    }
+                    restoreAdapter()
+                }
+            }
+        } else {
+            restoreAdapter()
         }
     }
 
@@ -570,6 +645,17 @@ final class ChargeControlService: ObservableObject {
         operation(proxy) { data in
             finish(ChargeControlIPC.decodeResponse(data))
         }
+        // launchd can keep retrying a stale registration without replying or
+        // invalidating XPC. Do not leave every later control request queued forever.
+        let requestConnection = connection
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self, weak requestConnection] in
+            guard !finished else { return }
+            if let requestConnection, self?.connection === requestConnection {
+                requestConnection.invalidate()
+                self?.connection = nil
+            }
+            finish(nil)
+        }
     }
 
     private func proxy(errorHandler: @escaping (NSXPCConnection) -> Void) -> ChargeControlXPCProtocol? {
@@ -602,7 +688,14 @@ final class ChargeControlService: ObservableObject {
     private func apply(_ response: ChargeControlResponse) {
         let gateChanged = response.succeeded && appliedGate != response.snapshot.gate
         snapshot = response.snapshot
-        if let profile = response.snapshot.profile { self.profile = profile }
+        if var profile = response.snapshot.profile {
+            if profile.family == .nativePowerUI { profile.supportsInhibit = nativeChargingAvailable }
+            self.profile = profile
+            if usesNativeCharging && (limitPercent < 80 || limitPercent % 5 != 0) {
+                limitPercent = min(100, max(80, Int((Double(limitPercent) / 5).rounded()) * 5))
+                UserDefaults.standard.set(limitPercent, forKey: DefaultsKey.chargeLimitPercent)
+            }
+        }
         error = response.error
         if response.succeeded { appliedGate = response.snapshot.gate }
         now = Date()
@@ -647,10 +740,14 @@ final class ChargeControlService: ObservableObject {
         let installed = UserDefaults.standard.string(forKey: DefaultsKey.chargeControlHelperVersion) ?? ""
         let current = Self.helperVersion
         guard !installed.isEmpty, installed != current,
-              registrationAttemptedVersion != current,
-              !UserDefaults.standard.bool(forKey: DefaultsKey.chargeControlRecoveryNeeded) else { return false }
+              registrationAttemptedVersion != current else { return false }
         registrationAttemptedVersion = current
         isWorking = true
+        // A pending restore must not strand an obsolete/missing helper. Keep
+        // both recovery markers: the old helper restores on disconnect and the
+        // replacement restores any abandoned gate before accepting requests.
+        connection?.invalidate()
+        connection = nil
         Self.appService.unregister { error in
             DispatchQueue.main.async {
                 guard error == nil else {

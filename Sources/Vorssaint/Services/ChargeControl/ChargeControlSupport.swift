@@ -7,6 +7,7 @@ enum ChargeControlFamily: String, Codable, Equatable, Sendable {
     case appleSiliconCH0
     case appleSiliconCHT
     case intelBCLM
+    case nativePowerUI
 }
 
 enum ChargeControlGate: String, Codable, Equatable, Sendable {
@@ -162,7 +163,9 @@ enum ChargeControlPolicy {
         case .calibration(let state):
             return calibrationGate(chargePercent: chargePercent, state: state)
         case .dischargeToLimit:
-            return chargePercent > cap ? .forceDischarge : .inhibitCharging
+            // Manual battery-power override; the legacy case name is retained
+            // for compatibility. Only Stop (not the saved cap) ends this mode.
+            return .forceDischarge
         case .topUp:
             return .allowCharging
         case .limit:

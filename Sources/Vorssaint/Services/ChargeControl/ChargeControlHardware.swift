@@ -66,18 +66,28 @@ final class ChargeControlHardware {
             }
             chargePath = ChargePath(family: .appleSiliconCH0, enable: enable, inhibit: inhibit)
             dischargePath = Self.appleSiliconDischarge(key: ch0i, enabledByte: 0x01)
+        } else if let chie, chie.dataSize == 1 {
+            // New firmware gates charge inhibition, but still permits adapter
+            // control. The app must enforce its limit through PowerUI first.
+            chargePath = ChargePath(family: .nativePowerUI, enable: [], inhibit: [])
+            dischargePath = Self.appleSiliconDischarge(key: chie, enabledByte: 0x08)
         } else {
             return nil
         }
 
         profile = ChargeControlHardwareProfile(
             family: chargePath.family,
-            supportsInhibit: true,
+            supportsInhibit: chargePath.family != .nativePowerUI,
             supportsDischarge: dischargePath != nil)
     }
 
     func apply(gate: ChargeControlGate, limit: Int) -> Bool {
         let cap = ChargeControlPolicy.sanitizedLimit(limit)
+        if chargePath.family == .nativePowerUI {
+            // Never claim the helper inhibited charging: it only owns CHIE.
+            guard gate != .inhibitCharging else { return false }
+            return setDischarge(gate == .forceDischarge)
+        }
         switch gate {
         case .allowCharging:
             return setDischarge(false) && setChargingEnabled(true, limit: cap)

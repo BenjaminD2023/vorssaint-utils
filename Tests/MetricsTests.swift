@@ -14913,7 +14913,15 @@ struct MetricsTests {
         expect(ChargeControlPolicy.desiredGate(chargePercent: 90, limit: 80,
                                                wasInhibited: false, mode: .dischargeToLimit,
                                                family: .appleSiliconCHT) == .forceDischarge,
-               "discharge-to-limit drains while the battery is above the cap")
+               "manual discharge overrides the cap")
+        for percent in [0, 10, 79, 80, 90, 100] {
+            for connected in [false, true] {
+                expect(ChargeControlPolicy.desiredGate(chargePercent: percent, limit: 90,
+                       wasInhibited: true, mode: .dischargeToLimit, family: .nativePowerUI,
+                       externalConnected: connected) == (connected ? .forceDischarge : .allowCharging),
+                       "manual discharge ignores the limit; unplugged Macs need no adapter write")
+            }
+        }
         expect(ChargeControlPolicy.desiredGate(chargePercent: 90, limit: 80,
                                                wasInhibited: true, mode: .topUp,
                                                family: .appleSiliconCHT) == .allowCharging

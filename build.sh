@@ -452,6 +452,9 @@ if (( TEST )); then
 fi
 
 echo "▸ Compiling ($BUILD_CONFIGURATION) against $(basename "$SDK")…"
+NATIVE_CHARGE_OBJECT="$(mktemp -d)/NativeChargeControl.o"
+clang -fobjc-arc -fmodules -isysroot "$SDK" -target "$TARGET" \
+    -c Sources/NativeChargeControl/NativeChargeControl.m -o "$NATIVE_CHARGE_OBJECT"
 APP_SOURCES=(Sources/Vorssaint/**/*.swift)
 if (( DEV )); then
     APP_OBJECT_DIR="build/objects/$EXECUTABLE"
@@ -462,12 +465,14 @@ if (( DEV )); then
         -output-file-map "$APP_OUTPUT_FILE_MAP" \
         -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" \
         "${BUILD_VARIANT_FLAGS[@]}" \
+        -I Sources/NativeChargeControl "$NATIVE_CHARGE_OBJECT" \
         "${APP_SOURCES[@]}" -o "build/$EXECUTABLE"
 else
     rm -rf build
     mkdir -p build
     swiftc "${APP_OPTIMIZATION_FLAGS[@]}" -target "$TARGET" -sdk "$SDK" \
         "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" "${BUILD_VARIANT_FLAGS[@]}" \
+        -I Sources/NativeChargeControl "$NATIVE_CHARGE_OBJECT" \
         "${APP_SOURCES[@]}" -o "build/$EXECUTABLE"
 fi
 
