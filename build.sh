@@ -14,10 +14,12 @@ cd "$(dirname "$0")"
 # the script ends.
 ICON_TMP=""
 STAGE_TMP=""
+NATIVE_CHARGE_TMP=""
 
 cleanup() {
     [[ -n "$ICON_TMP" ]] && rm -rf "$ICON_TMP"
     [[ -n "$STAGE_TMP" ]] && rm -rf "$STAGE_TMP"
+    [[ -n "$NATIVE_CHARGE_TMP" ]] && rm -rf "$NATIVE_CHARGE_TMP"
     return 0
 }
 trap cleanup EXIT
@@ -469,7 +471,8 @@ if (( TEST )); then
 fi
 
 echo "▸ Compiling ($BUILD_CONFIGURATION) against $(basename "$SDK")…"
-NATIVE_CHARGE_OBJECT="$(mktemp -d)/NativeChargeControl.o"
+NATIVE_CHARGE_TMP="$(mktemp -d)"
+NATIVE_CHARGE_OBJECT="$NATIVE_CHARGE_TMP/NativeChargeControl.o"
 clang -fobjc-arc -fmodules -isysroot "$SDK" -target "$TARGET" \
     -c Sources/NativeChargeControl/NativeChargeControl.m -o "$NATIVE_CHARGE_OBJECT"
 APP_SOURCES=(Sources/Vorssaint/**/*.swift)
