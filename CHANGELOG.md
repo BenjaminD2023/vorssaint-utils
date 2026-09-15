@@ -7,14 +7,37 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-App Switcher can focus its list on the display under the pointer. Screenshot previews gain optional keyboard focus, and Scratchpad adds shortcuts to create and close tabs.
+Dynamic Island prioritizes music apps and adds everyday controls, configurable focus cycles, timer sound alerts, ready-to-use layouts, draggable shortcuts, keyboard navigation, downloads, camera and file tools. App Switcher gains smoother opening, steadier previews, display filtering and better focus; other improvements cover clipboard reliability, update checks, shortcuts, attachments, capture previews, power controls, menu bar recovery, incoming calls, cleaning safeguards, uninstall results, fan control and recording synchronization.
 
 ### Added
 - Charge Limit adds charge controls and accurate battery status, with a native macOS 27 charging backend (80–100% in 5% steps), Top Up to 100%, and manual Discharge independent of the saved limit or cable connection. Discharge controls adapter input without shutting down USB ports; connected USB devices remained enumerated in testing. Earlier supported hardware retains its existing charge limits and Sailing mode.
 - The menu bar battery icon shows live charge fill, charging and holding states, and improved charging-bolt contrast.
+- Shelf accepts attachments dragged from other apps, preserving complete files and original names. Thanks to @Borisserz.
+- Optional Dynamic Island brings music, sound, brightness, configurable focus cycles, timer sound alerts, calendar, shortcuts, notifications, downloads and file tools together.
+- Display brightness gains optional custom shortcuts for the primary display or the display under the pointer. Thanks to @EugeneCarldotme.
 - App Switcher can show only windows on the display under the pointer, staying closed on empty displays. Thanks to @EugeneCarldotme.
 - Scratchpad tabs can be created with Command-T and closed with Command-W, keeping confirmation for notes with text. Thanks to @Borisserz.
-- Screenshot previews can take keyboard focus automatically when enabled in More options. Thanks to @santi-ug.
+- Screenshot gains custom editor shortcuts and optional keyboard focus for previews. Thanks to @santi-ug.
+
+### Changed
+- The App Switcher opens more smoothly when many windows are open. Thanks to @bebricoOOOOOOf.
+
+### Fixed
+- Clipboard History skips expired copies, reports failed writes and avoids automatic paste after failure. Thanks to @MaximilianMauroner.
+- Fan Control keeps trying to take over stopped fans on Macs that lack the firmware unlock key. Thanks to @Yash121l.
+- Power keeps the system reading legible beside its graph while editing the panel. Thanks to @COMEBACKISREAL.
+- Screenshots respect editor and pinned-image visibility when switching capture tools, while recordings keep capture windows hidden. Thanks to @anandghegde.
+- App Updates clears missing-source warnings only when the catalog can verify the app, preserving incomplete checks otherwise. Thanks to @iltonandrew.
+- App Switcher keeps its icon row steady and selected windows visible during searches and window closures. Thanks to @shlok1806.
+- Uninstaller reports completed removals accurately, counts recovered space once and keeps real failures visible. Thanks to @Borisserz.
+- Screen recordings keep video, system sound and microphone audio aligned through pauses, with no blank opening. Thanks to @EugeneCarldotme and @fakepooh.
+- Menu bar icon recovery waits for placement, preserves full-size content and avoids overlapping attempts. Thanks to @Borisserz.
+- Panels and App Switcher stay open when typing with the Accessibility Keyboard, including the first use. Thanks to @fermincasagrande.
+- Quit on close keeps incoming calls connected when their app has no open window. Thanks to @Borisserz.
+- Cleaner preserves installed customizations and localization folders during manual and scheduled cleanup. Thanks to @EugeneCarldotme and @ywu73.
+- App Switcher keeps newly opened windows focused and makes more apps available in crowded window lists. Thanks to @akune.
+- The App Switcher no longer shows blank entries for hidden helper windows that apps keep out of window cycling. Thanks to @EugeneCarldotme.
+- The menu bar panel keeps a single background up to the small arrow at its top, instead of a lighter patch there. Thanks to @iltonandrew.
 
 ## [3.3.5] - 2026-09-06
 

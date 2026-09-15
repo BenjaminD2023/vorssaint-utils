@@ -30,9 +30,8 @@ final class SMCClient {
     }
 }
 
-@main
 enum ChargeControlHardwareTests {
-    static func main() {
+    static func run() {
         SMCClient.values = ["CHTE": [0, 0, 0, 0], "CHIE": [0], "CH0I": [0]]
         guard let hardware = ChargeControlHardware() else { fatalError("missing test hardware") }
         precondition(hardware.apply(gate: .inhibitCharging, limit: 80))
