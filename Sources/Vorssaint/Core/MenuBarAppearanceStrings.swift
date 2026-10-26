@@ -24,6 +24,7 @@ extension FeatureStrings {
         case .tr: return .tr
         case .ru: return .ru
         case .es: return .es
+        case .sk: return .sk
         case .de: return .de
         case .fr: return .fr
         case .it: return .it
@@ -32,6 +33,7 @@ extension FeatureStrings {
         case .zhHans: return .zhHans
         case .zhTW: return .zhTW
         case .zhHK: return .zhHK
+        case .uk: return .uk
         }
     }
 }
@@ -102,6 +104,19 @@ extension MenuBarAppearanceStrings {
         highFrom: "Alto desde"
     )
 
+    static let sk = MenuBarAppearanceStrings(
+        label: "Zobrazenie vyťaženia",
+        values: "Hodnoty",
+        bars: "Pruhy",
+        caption: "Vyťaženie CPU, GPU, pamäte a disku aj stav batérie a batérií príslušenstva možno samostatne zobraziť ako hodnoty alebo pruhy. Ostatné údaje zostávajú číselné.",
+        customize: "Farby a limity pruhov",
+        normalColor: "Bežná farba",
+        mediumColor: "Stredná farba",
+        highColor: "Vysoká farba",
+        mediumFrom: "Stredná od",
+        highFrom: "Vysoká od"
+    )
+
     static let de = MenuBarAppearanceStrings(
         label: "Auslastungsanzeige",
         values: "Werte",
@@ -132,7 +147,7 @@ extension MenuBarAppearanceStrings {
         label: "Visualizzazione utilizzo",
         values: "Valori",
         bars: "Barre",
-        caption: "L'utilizzo di CPU, GPU, memoria e disco, la batteria e le batterie degli accessori possono essere mostrati come valori o barre per ciascuno. Le altre letture restano numeriche.",
+        caption: "L’utilizzo di CPU, GPU, memoria e disco, la batteria e le batterie degli accessori possono essere mostrati come valori o barre per ciascuno. Le altre letture restano numeriche.",
         customize: "Colori e soglie delle barre",
         normalColor: "Colore normale",
         mediumColor: "Colore medio",
@@ -204,5 +219,17 @@ extension MenuBarAppearanceStrings {
         highColor: "高負載顏色",
         mediumFrom: "中等起點",
         highFrom: "高負載起點"
+    )
+    static let uk = MenuBarAppearanceStrings(
+        label: "Відображення використання",
+        values: "Значення",
+        bars: "Смуги",
+        caption: "Використання CPU, GPU, пам’яті й диска, а також заряд батареї та батарей аксесуарів можна окремо показувати як значення або смуги. Інші показники залишаються числовими.",
+        customize: "Кольори та ліміти смуг",
+        normalColor: "Звичайний колір",
+        mediumColor: "Середній колір",
+        highColor: "Високий колір",
+        mediumFrom: "Середній від",
+        highFrom: "Високий від"
     )
 }

@@ -3,10 +3,51 @@
 
 import Accelerate
 import CoreAudio
+import Darwin
+
+/// The sample representation the mixer can render without conversion. A tap
+/// tied to a device stream inherits that stream's format; it is not always
+/// the interleaved Float32 produced by a stereo mixdown.
+struct MixerTapFormat: Equatable {
+    let sampleRate: Double
+    let channels: Int
+    let flags: AudioFormatFlags
+
+    init?(_ format: AudioStreamBasicDescription, allowNonInterleaved: Bool = false) {
+        let channels = Int(format.mChannelsPerFrame)
+        let planar = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+        guard format.mFormatID == kAudioFormatLinearPCM,
+              format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
+              format.mFormatFlags & kAudioFormatFlagIsPacked != 0,
+              allowNonInterleaved || !planar,
+              format.mFormatFlags & kAudioFormatFlagIsBigEndian == kAudioFormatFlagsNativeEndian,
+              format.mBitsPerChannel == 32, channels > 0,
+              UInt64(format.mBytesPerFrame) == UInt64(planar ? 1 : channels) * 4,
+              format.mFramesPerPacket == 1,
+              format.mBytesPerPacket == format.mBytesPerFrame,
+              format.mSampleRate.isFinite, format.mSampleRate > 0 else { return nil }
+        sampleRate = format.mSampleRate
+        self.channels = channels
+        flags = format.mFormatFlags
+    }
+
+    /// A direct tap avoids the system's stereo mixdown attenuation on wide
+    /// interfaces. Restrict it to one complete stream on the app's own output,
+    /// so every captured channel has the same destination and no other stream
+    /// or device is dropped. Other routes retain the stereo mixdown path.
+    static func usesDeviceStream(processDevices: [[AudioObjectID]], outputDevice: AudioObjectID,
+                                 streamCount: Int, startingChannel: UInt32,
+                                 format: MixerTapFormat?) -> Bool {
+        guard outputDevice != 0, streamCount == 1, startingChannel == 1,
+              let format, format.channels > 2 else { return false }
+        let devices = Set(processDevices.flatMap { $0 })
+        return devices == [outputDevice]
+    }
+}
 
 /// Puts a tapped app's audio onto whatever shape the output device asks for.
 ///
-/// The tap always hands over the same thing: two interleaved channels. The
+/// The tap hands over interleaved Float32, validated when it is created. The
 /// device on the other side does not have to match. A headset in a call
 /// carries one channel, an audio interface can carry eight, and a device that
 /// also records puts its own microphone in front of the tap in the same list
@@ -40,9 +81,13 @@ enum MixerRender {
                                tapChannels: Int) -> Int? {
         var lone: Int?
         for index in stride(from: buffers.count - 1, through: 0, by: -1)
-        where buffers[index].mData != nil && buffers[index].mNumberChannels > 0 {
-            if Int(buffers[index].mNumberChannels) == tapChannels { return index }
-            if buffers.count == 1 { lone = index }
+        where buffers[index].mNumberChannels > 0 {
+            if Int(buffers[index].mNumberChannels) == tapChannels {
+                // An empty tap is still the tap. Looking farther back could
+                // play a live microphone with the same channel count.
+                return buffers[index].mData == nil ? nil : index
+            }
+            if buffers.count == 1, buffers[index].mData != nil { lone = index }
         }
         return lone
     }
@@ -57,12 +102,41 @@ enum MixerRender {
         return nil
     }
 
+    /// Silences every output frame from `frame` on.
+    ///
+    /// The output buffer is handed over dirty: it holds whatever CoreAudio
+    /// last put in that memory. Frames the tap cannot fill — the tail of a
+    /// buffer longer than the tap's, or the whole buffer on a cycle with no
+    /// tap to read — used to be left as they were found and played back as a
+    /// fragment of older audio (issue #326). Silence is the right content for
+    /// a frame with no samples behind it.
+    static func silence(_ output: UnsafeMutableAudioBufferListPointer, from frame: Int = 0) {
+        for buffer in output {
+            // A suspended callback may receive a new, unsupported format.
+            // Silence all bytes without interpreting them as Float32.
+            if frame == 0 {
+                if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) }
+                continue
+            }
+            let channels = Int(buffer.mNumberChannels)
+            guard channels > 0,
+                  let destination = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+            let unwritten = frames(bytes: buffer.mDataByteSize,
+                                   channels: buffer.mNumberChannels) - frame
+            guard unwritten > 0 else { continue }
+            vDSP_vclr(destination + frame * channels, 1, vDSP_Length(unwritten * channels))
+        }
+    }
+
     /// Renders one interleaved source buffer onto the output, scaled by
-    /// `gain`, and answers how many frames it wrote.
+    /// `gain`, and answers how many frames it wrote. Whatever it does not
+    /// write it silences, so the caller never has to think about the tail.
     @discardableResult
     static func render(source: AudioBuffer,
                        into output: UnsafeMutableAudioBufferListPointer,
                        gain: Float) -> Int {
+        var written = 0
+        defer { silence(output, from: written) }
         let sourceChannels = Int(source.mNumberChannels)
         guard sourceChannels > 0,
               let samples = source.mData?.assumingMemoryBound(to: Float.self) else { return 0 }
@@ -85,7 +159,8 @@ enum MixerRender {
         if output.count == 1, Int(output[0].mNumberChannels) == sourceChannels,
            let destination = output[0].mData?.assumingMemoryBound(to: Float.self) {
             vDSP_vsmul(samples, 1, &gain, destination, 1, vDSP_Length(frames * sourceChannels))
-            return frames
+            written = frames
+            return written
         }
 
         // One channel to play with: fold the source into it instead of
@@ -100,7 +175,8 @@ enum MixerRender {
                 vDSP_vsma(samples + channel, vDSP_Stride(sourceChannels), &scale,
                           destination, 1, destination, 1, vDSP_Length(frames))
             }
-            return frames
+            written = frames
+            return written
         }
 
         var firstOutputChannel = 0
@@ -121,6 +197,7 @@ enum MixerRender {
                            destination + channel, vDSP_Stride(channels), vDSP_Length(frames))
             }
         }
-        return didWriteSourceChannel ? frames : 0
+        written = didWriteSourceChannel ? frames : 0
+        return written
     }
 }

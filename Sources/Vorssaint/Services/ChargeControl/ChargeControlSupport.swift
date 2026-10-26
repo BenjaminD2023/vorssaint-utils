@@ -7,6 +7,7 @@ enum ChargeControlFamily: String, Codable, Equatable, Sendable {
     case appleSiliconCH0
     case appleSiliconCHT
     case intelBCLM
+    case nativePowerUI
 }
 
 enum ChargeControlGate: String, Codable, Equatable, Sendable {
@@ -154,13 +155,17 @@ enum ChargeControlPolicy {
                             sailingRange: Int? = nil,
                             wasInhibited: Bool,
                             mode: ChargeControlMode,
-                            family: ChargeControlFamily?) -> ChargeControlGate {
+                            family: ChargeControlFamily?,
+                            externalConnected: Bool = true) -> ChargeControlGate {
+        guard externalConnected else { return .allowCharging }
         let cap = sanitizedLimit(limit)
         switch mode {
         case .calibration(let state):
             return calibrationGate(chargePercent: chargePercent, state: state)
         case .dischargeToLimit:
-            return chargePercent > cap ? .forceDischarge : .inhibitCharging
+            // Manual battery-power override; the legacy case name is retained
+            // for compatibility. Only Stop (not the saved cap) ends this mode.
+            return .forceDischarge
         case .topUp:
             return .allowCharging
         case .limit:
@@ -176,7 +181,7 @@ enum ChargeControlPolicy {
         if chargePercent >= cap { return .inhibitCharging }
         if let sailingRange {
             let resumeBelow = cap - sanitizedSailingRange(sailingRange, limit: cap)
-            if wasInhibited && chargePercent >= resumeBelow { return .inhibitCharging }
+            if wasInhibited && chargePercent > resumeBelow { return .inhibitCharging }
         } else if wasInhibited && chargePercent > cap - hysteresis {
             return .inhibitCharging
         }
@@ -242,9 +247,9 @@ enum ChargeControlPolicy {
         return max(0, holdDuration - now.timeIntervalSince(started))
     }
 
-    static func restoreReason(isDischarging: Bool,
+    static func restoreReason(hasActiveGate: Bool,
                               heartbeatAge: TimeInterval) -> Bool {
-        isDischarging && heartbeatAge > heartbeatLimit
+        hasActiveGate && heartbeatAge > heartbeatLimit
     }
 
     /// Fit a write to the key's reported size. M-series firmware uses 1-byte

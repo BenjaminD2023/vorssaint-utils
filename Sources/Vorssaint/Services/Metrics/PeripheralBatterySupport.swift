@@ -63,7 +63,9 @@ enum PeripheralBatterySupport {
             raw = nil
         }
         guard let raw, raw.isFinite else { return nil }
-        let rounded = Int(raw.rounded())
+        // Failable, not clamping: a value past Int.max is a device lying, not a
+        // 0...100 reading, so it returns nil like every other unusable input.
+        guard let rounded = Int(exactly: raw.rounded()) else { return nil }
         guard (0...100).contains(rounded) else { return nil }
         return rounded
     }
@@ -331,6 +333,13 @@ enum PeripheralBatterySupport {
         guard let first = sorted(devices).first else { return nil }
         return (first.kind.menuLabel, MenuBarUsageBarSupport.percentFraction(first.percent))
     }
+}
+
+/// A cache keeps the time of its observation, including per-device sources:
+/// refreshing HID does not make a cached Bluetooth percentage current.
+struct PeripheralBatterySample: Equatable {
+    var devices: [PeripheralBatteryDevice] = []
+    var observedAt: [String: TimeInterval] = [:]
 }
 
 enum PeripheralBatteryRefreshPolicy {

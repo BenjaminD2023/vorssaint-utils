@@ -11,9 +11,11 @@ struct FanControlSection: View {
         FanControlPolicy.defaultCoolingLevel
     @AppStorage(DefaultsKey.fanControlCurves) private var curvesStorage =
         FanControlConfiguration.defaultCurvesStorage
+    @AppStorage(DefaultsKey.fanControlResume) private var resume = false
     @AppStorage(DefaultsKey.temperatureUnit) private var temperatureUnit =
         TemperatureUnit.celsius.rawValue
     var collapsible = true
+    var fallbackFanSpeeds: [Double] = []
 
     private var strings: FanControlFeatureStrings {
         FeatureStrings.fanControl(l10n.language)
@@ -24,19 +26,22 @@ struct FanControlSection: View {
             FanControlCardContent(strings: strings,
                                   betaLabel: l10n.s.betaBadge,
                                   snapshot: service.snapshot,
+                                  fallbackFanSpeeds: fallbackFanSpeeds,
                                   accessState: service.accessState,
                                   error: service.error,
                                   isWorking: service.isWorking,
                                   mode: modeBinding,
                                   coolingLevel: $coolingLevel,
                                   curves: curvesBinding,
+                                  resume: $resume,
                                   temperatureUnit: displayTemperatureUnit,
                                   authorize: service.authorize,
                                   applyConfiguration: service.applyConfiguration,
-                                  stopCooling: service.restoreAutomatic)
+                                  stopCooling: service.returnToSystem)
                 .panelCard()
                 .onAppear { service.panelDidAppear() }
                 .onDisappear { service.panelDidDisappear() }
+                .onChange(of: resume) { _, _ in service.resumePreferenceDidChange() }
         }
     }
 
@@ -70,12 +75,14 @@ struct FanControlCardContent: View {
     let strings: FanControlFeatureStrings
     let betaLabel: String
     let snapshot: FanControlSnapshot
+    let fallbackFanSpeeds: [Double]
     let accessState: FanControlService.AccessState
     let error: FanControlErrorCode?
     let isWorking: Bool
     @Binding var mode: FanControlMode
     @Binding var coolingLevel: Int
     @Binding var curves: [FanControlCurve]
+    @Binding var resume: Bool
     let temperatureUnit: TemperatureUnit
     let authorize: () -> Void
     let applyConfiguration: (FanControlConfiguration) -> Void
@@ -85,7 +92,16 @@ struct FanControlCardContent: View {
         VStack(alignment: .leading, spacing: 10) {
             statusHeader
 
-            if !snapshot.fans.isEmpty { fanRows }
+            if !fallbackFanSpeeds.isEmpty,
+               snapshot.fans.isEmpty || error == .helperUnavailable {
+                fallbackFanRows
+            } else if !snapshot.fans.isEmpty {
+                fanRows
+            }
+
+            if error != .helperUnavailable, error != .controlFailed {
+                temperatureSummary
+            }
 
             if let message = stateMessage {
                 Text(message)
@@ -118,12 +134,51 @@ struct FanControlCardContent: View {
 
             action
 
+            if canConfigure, mode != .system {
+                Toggle(strings.resumeAfterRestart, isOn: $resume)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+            }
+
             if controlsCanAppear {
                 Text(strings.safetyCaption)
                     .font(.system(size: 9.5))
                     .foregroundStyle(Color.secondary.opacity(0.84))
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var temperatureSummary: some View {
+        let readings = snapshot.temperatures ?? []
+        let targets: [(FanControlTemperatureSource, String)] = [
+            (.hottestSoC, strings.hottestSoC),
+            (.hottestCPU, strings.hottestCPU),
+            (.hottestGPU, strings.hottestGPU)
+        ]
+
+        let formatted: [String] = targets.compactMap { target -> String? in
+            let (source, name) = target
+            guard let reading = readings.first(where: { $0.source == source }) else {
+                return nil
+            }
+            return "\(name) \(MetricFormat.temperature(reading.celsius, unit: temperatureUnit))"
+        }
+
+        if !formatted.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(strings.temperature)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+
+                Text(formatted.joined(separator: " · "))
+                    .font(.system(size: 10.5, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 2)
         }
     }
 
@@ -211,6 +266,23 @@ struct FanControlCardContent: View {
         .padding(.vertical, 1)
     }
 
+    private var fallbackFanRows: some View {
+        VStack(spacing: 5) {
+            ForEach(fallbackFanSpeeds.indices, id: \.self) { index in
+                HStack(spacing: 6) {
+                    Text(String(format: strings.fanNameFormat, index + 1))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(String(format: strings.currentRPMFormat,
+                                Int(fallbackFanSpeeds[index].rounded())))
+                        .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                }
+            }
+        }
+        .padding(.vertical, 1)
+    }
+
     @ViewBuilder
     private var action: some View {
         if error == .noFans || error == .unsupportedHardware || error == .alreadyControlled {
@@ -282,7 +354,8 @@ struct FanControlCardContent: View {
         switch error {
         case .alreadyControlled: return strings.alreadyControlled
         case .unsupportedHardware: return strings.unsupported
-        case .helperUnavailable, .controlFailed: return strings.failed
+        case .helperUnavailable: return strings.helperUnavailable
+        case .controlFailed: return strings.failed
         case .authorizationRequired: return strings.approvalCaption
         case .noFans, .none: break
         }

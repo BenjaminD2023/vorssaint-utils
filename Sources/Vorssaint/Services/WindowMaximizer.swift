@@ -18,6 +18,7 @@ final class WindowMaximizer: ObservableObject {
     private var runLoopSource: CFRunLoopSource?
     private var pendingClick: ClickTarget?
     private var originalFrames: [CGWindowID: AXFrame] = [:]
+    private var maximizedFrames: [CGWindowID: AXFrame] = [:]
     private var frameAnimations: [CGWindowID: Timer] = [:]
     private var assistiveModeSuspensions: [CGWindowID: EnhancedUserInterfaceSuspension] = [:]
 
@@ -25,12 +26,16 @@ final class WindowMaximizer: ObservableObject {
     private let frameTolerance: CGFloat = 4
     private let zoomAnimationDuration: TimeInterval = 0.22
 
-    private init() {}
+    private init() {
+        SessionActivity.shared.onChange { [weak self] _ in self?.syncWithPreferences() }
+    }
 
     func syncWithPreferences() {
         let wanted = AppFeature.windowMaximizer.isAvailable
             && UserDefaults.standard.bool(forKey: DefaultsKey.windowMaximizeEnabled)
-        if wanted, Permissions.shared.accessibility {
+        if SessionActivitySupport.tapShouldRun(featureWanted: wanted,
+                                               accessibilityGranted: AXIsProcessTrusted(),
+                                               sessionIsActive: SessionActivity.shared.isActive) {
             start()
         } else {
             stop()
@@ -42,6 +47,7 @@ final class WindowMaximizer: ObservableObject {
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         }
+        if let tap { CFMachPortInvalidate(tap) }
         tap = nil
         runLoopSource = nil
         pendingClick = nil
@@ -50,6 +56,7 @@ final class WindowMaximizer: ObservableObject {
         for suspension in assistiveModeSuspensions.values { suspension.resume() }
         assistiveModeSuspensions.removeAll()
         originalFrames.removeAll()
+        maximizedFrames.removeAll()
         isRunning = false
     }
 
@@ -87,7 +94,11 @@ final class WindowMaximizer: ObservableObject {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            if SessionActivity.shared.isActive, AXIsProcessTrusted(), let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            } else {
+                DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
+            }
             return Unmanaged.passUnretained(event)
         }
 
@@ -129,6 +140,7 @@ final class WindowMaximizer: ObservableObject {
 
     private func target(at point: CGPoint) -> ClickTarget? {
         guard let candidate = WindowServerTrafficLightHitTest.candidate(at: point, button: .zoom),
+              !isExcluded(pid: candidate.pid),
               let element = elementAt(point: point),
               let window = topLevelWindow(from: element),
               role(of: window) == (kAXWindowRole as String),
@@ -147,26 +159,50 @@ final class WindowMaximizer: ObservableObject {
                            allowsNativeFallback: buttonFrame.allowsNativeFallback)
     }
 
+    /// The list is read here rather than cached: this only runs for a press on
+    /// a green button, and a restored backup needs no reload to take effect.
+    private func isExcluded(pid: pid_t) -> Bool {
+        let excluded = UserDefaults.standard.stringArray(forKey: DefaultsKey.windowMaximizeExcludedApps) ?? []
+        guard !excluded.isEmpty else { return false }
+        return WindowMaximizerSupport.excludes(
+            bundleIdentifier: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+            excludedBundleIdentifiers: excluded)
+    }
+
     @discardableResult
     private func toggle(_ target: ClickTarget) -> Bool {
         guard let current = frame(of: target.window),
               let screen = bestScreen(for: current)
         else { return false }
 
-        let maximized = axFrame(fromAppKit: screen.visibleFrame)
-        if current.isClose(to: maximized, tolerance: frameTolerance),
+        let maximized = axFrame(fromAppKit: screen.windowLayoutVisibleFrame)
+        // Revealing the strip may change its measured width before the second
+        // click. Restore from the frame actually applied, not only today's size.
+        let previousMaximized = maximizedFrames[target.windowID] ?? maximized
+        if (current.isClose(to: previousMaximized, tolerance: frameTolerance)
+            || current.isClose(to: maximized, tolerance: frameTolerance)),
            let original = originalFrames[target.windowID],
            original.size.width > 80,
            original.size.height > 80 {
             return changeFrame(to: original, of: target) { [weak self] success in
-                if success { self?.originalFrames.removeValue(forKey: target.windowID) }
+                if success {
+                    self?.originalFrames.removeValue(forKey: target.windowID)
+                    self?.maximizedFrames.removeValue(forKey: target.windowID)
+                }
             }
         } else {
             originalFrames[target.windowID] = current
-            if changeFrame(to: maximized, of: target, completion: { _ in }) {
+            maximizedFrames[target.windowID] = maximized
+            if changeFrame(to: maximized, of: target, completion: { [weak self] success in
+                if !success {
+                    self?.originalFrames.removeValue(forKey: target.windowID)
+                    self?.maximizedFrames.removeValue(forKey: target.windowID)
+                }
+            }) {
                 return true
             }
             originalFrames.removeValue(forKey: target.windowID)
+            maximizedFrames.removeValue(forKey: target.windowID)
             return false
         }
     }
@@ -239,10 +275,8 @@ final class WindowMaximizer: ObservableObject {
 
     private func elementAt(point: CGPoint) -> AXUIElement? {
         let system = AXUIElementCreateSystemWide()
-        // Bounded AX inside the mouse tap: a hung app under the cursor must
-        // not stall the main thread (and with it every event tap) for the
-        // 6 second default timeout.
-        AXUIElementSetMessagingTimeout(system, 0.35)
+        // No cap here: on the system-wide element a timeout is the default for
+        // every question this process asks, whoever asks it (#938).
         var element: AXUIElement?
         guard AXUIElementCopyElementAtPosition(system, Float(point.x), Float(point.y), &element) == .success,
               let element
@@ -328,6 +362,14 @@ final class WindowMaximizer: ObservableObject {
             restoreFrame(fallback, on: window)
             completion(false)
             return
+        }
+        if let actual = frame(of: window),
+           WindowMaximizerSupport.overshoots(actual.size, target: target.size) {
+            _ = applyFrame(AXFrame(origin: WindowMaximizerSupport.approachOrigin(for: target.origin,
+                                                                                 tolerance: frameTolerance),
+                                   size: target.size),
+                           on: window)
+            _ = applyFrame(target, on: window)
         }
         if let actual = frame(of: window), actual.isClose(to: target, tolerance: frameTolerance) {
             completion(true)
