@@ -96,11 +96,16 @@ enum ForkAppearanceTests {
                 && lightBatteryText.alphaComponent == 1
                 && darkBatteryText.alphaComponent == 1,
                "native battery text follows light and dark menu bar appearances")
-        suite.expect(MenuBarBatterySupport.glyphSize.width >= 30
-                && MenuBarBatterySupport.glyphSize.width <= 32
-                && MenuBarBatterySupport.glyphSize.height >= 13
-                && MenuBarBatterySupport.glyphSize.height <= 15,
-               "menu bar battery matches the native status-item symbol size")
+        let nativeBatteryConfiguration = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: .labelColor))
+        let nativeBatterySize = NSImage(systemSymbolName: "battery.100percent", accessibilityDescription: nil)?
+            .withSymbolConfiguration(nativeBatteryConfiguration)?.size ?? CGSize(width: 31, height: 14)
+        let batteryGlyphSize = MenuBarBatterySupport.glyphSize
+        suite.expect(batteryGlyphSize.width.isFinite && batteryGlyphSize.height.isFinite
+                && batteryGlyphSize.width > 0 && batteryGlyphSize.height > 0
+                && batteryGlyphSize == nativeBatterySize,
+               "menu bar battery matches the current native 18-point status-item symbol size: "
+                + "actual \(batteryGlyphSize), expected \(nativeBatterySize)")
         suite.expect(MenuBarBatterySupport.glyphImage(percent: 63,
                                                 isCharging: true,
                                                 isPluggedIn: false,
