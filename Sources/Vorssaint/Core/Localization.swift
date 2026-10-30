@@ -1279,7 +1279,6 @@ struct Strings {
     let scrollHorizontalName: String
     let zoomSection: String
     let zoomControlNote: String
-    let verticalZoom: String
     let pinchZoom: String
     let scrollHorizontalModifierLabel: String
     let scrollHorizontalCommandKey: String
@@ -1287,6 +1286,7 @@ struct Strings {
     let switcherShowShortcutHints: String
     let switcherShowShortcutHintsCaption: String
     let uninstallerHomebrewPackageFormat: String
+    let uninstallerHomebrewCheckFailed: String
     let shelfEdgeToggle: String
     let shelfEdgeCaption: String
     let focusFollowsMouseName: String
@@ -2395,8 +2395,7 @@ extension Strings {
         invertHorizontalScroll: "Inverter rolagem horizontal",
         scrollHorizontalName: "Rolar na horizontal segurando uma tecla",
         zoomSection: "Zoom",
-        zoomControlNote: "Control + rolagem amplia o conteúdo do app em vez da tela do macOS. O Zoom por teclado ativa a janela sob o ponteiro.",
-        verticalZoom: "Zoom",
+        zoomControlNote: "Control + rolagem amplia o conteúdo do app em vez da tela do macOS.",
         pinchZoom: "Zoom por pinça",
         scrollHorizontalModifierLabel: "Tecla modificadora",
         scrollHorizontalCommandKey: "Command",
@@ -2404,6 +2403,7 @@ extension Strings {
         switcherShowShortcutHints: "Mostrar dicas de atalhos",
         switcherShowShortcutHintsCaption: "Exibe os atalhos de apps e janelas abaixo dos ícones.",
         uninstallerHomebrewPackageFormat: "%@ também será removido do Homebrew.",
+        uninstallerHomebrewCheckFailed: "Não foi possível verificar se o Homebrew gerencia este aplicativo. Atualize para tentar novamente ou desinstale pelo Homebrew.",
         shelfEdgeToggle: "Abrir perto de uma borda da tela",
         shelfEdgeCaption: "Ao arrastar um arquivo para perto da borda da tela, a área espia para dentro. Solte ali, ou puxe de volta e ela recua.",
         focusFollowsMouseName: "Foco ao passar o mouse",
@@ -3513,8 +3513,7 @@ extension Strings {
         invertHorizontalScroll: "Invert horizontal scrolling",
         scrollHorizontalName: "Scroll sideways while holding a key",
         zoomSection: "Zoom",
-        zoomControlNote: "Control + scroll performs app zoom instead of macOS screen zoom. Keyboard Zoom activates the window under the pointer.",
-        verticalZoom: "Zoom",
+        zoomControlNote: "Control + scroll performs app zoom instead of macOS screen zoom.",
         pinchZoom: "Pinch Zoom",
         scrollHorizontalModifierLabel: "Modifier key",
         scrollHorizontalCommandKey: "Command",
@@ -3522,6 +3521,7 @@ extension Strings {
         switcherShowShortcutHints: "Show shortcut hints",
         switcherShowShortcutHintsCaption: "Shows the app and window shortcuts below the icons.",
         uninstallerHomebrewPackageFormat: "%@ will also be removed from Homebrew.",
+        uninstallerHomebrewCheckFailed: "Could not verify whether Homebrew manages this app. Refresh to try again, or uninstall it from Homebrew.",
         shelfEdgeToggle: "Open near a screen edge",
         shelfEdgeCaption: "Drag a file toward the screen edge to peek the shelf in. Drop it there, or pull back and it retreats.",
         focusFollowsMouseName: "Focus follows mouse",

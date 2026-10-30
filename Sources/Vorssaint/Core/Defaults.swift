@@ -54,8 +54,6 @@ enum DefaultsKey {
     static let scrollInverterHorizontalEnabled = "scrollInverterHorizontalEnabled"
     static let scrollHorizontalEnabled = "scrollHorizontalEnabled"
     static let scrollHorizontalModifier = "scrollHorizontalModifier"
-    static let verticalZoomEnabled = "verticalZoomEnabled"
-    static let verticalZoomModifier = "verticalZoomModifier"
     static let pinchZoomEnabled = "pinchZoomEnabled"
     static let pinchZoomModifier = "pinchZoomModifier"
     static let focusFollowsMouseEnabled = "focusFollowsMouseEnabled"
@@ -107,6 +105,8 @@ enum DefaultsKey {
     static let systemShortcutTakeOverKeys = "systemShortcutTakeOverKeys"
     static let switcherShortcut = "switcherShortcut"      // GlobalShortcut storage value
     static let switcherWindowShortcut = "switcherWindowShortcut" // GlobalShortcut storage value
+    static let switcherAllWindowsShortcut = "switcherAllWindowsShortcut"
+    static let switcherAllWindowsShortcutEnabled = "switcherAllWindowsShortcutEnabled"
     static let switcherIconRowMode = "switcherIconRowMode"
     static let switcherSimpleMode = "switcherSimpleMode"  // app-only row without window captures
     static let switcherMergeTabs = "switcherMergeTabs"     // show one switcher entry per app (collapse all of an app's windows)
@@ -902,6 +902,7 @@ enum DefaultsKey {
     // AI agents: what the island reads from Claude Code, Codex, OpenCode and GitHub Copilot, and shows.
     static let notchAgentsEnabled = "notchAgentsEnabled"
     static let notchAgentsClaude = "notchAgentsClaude"
+    static let notchAgentsClaudeProfile = "notchAgentsClaudeProfile"
     static let notchAgentsCodex = "notchAgentsCodex"
     /// The Codex homes, `CODEX_HOME` folders, that get limits cards of their own.
     static let notchAgentsCodexProfiles = "notchAgentsCodexProfiles"
@@ -1064,13 +1065,13 @@ enum BrightnessUpdatePromptInfo {
 
 enum SupportUpdateIntroInfo {
     /// The stable release that gets this invitation, and the patches after it,
-    /// which share one completion marker. 3.4.2 introduces the revised message
-    /// even to people who completed the earlier invitation.
-    static let releaseVersion = "3.4.2"
+    /// which share one completion marker. The next stable update also includes
+    /// people who completed the previous invitation.
+    static let releaseVersion = "3.4.3"
 
     // Older beta onboarding wrote the release version before this screen was
     // available. A distinct completion marker keeps those upgraders eligible.
-    static let seenVersion = "3.4.2-support"
+    static let seenVersion = "3.4.3-support"
 
     static func matchesRelease(_ appVersion: String) -> Bool {
         guard let version = UpdateServiceSupport.SemanticVersion(raw: appVersion),
@@ -1253,8 +1254,6 @@ enum Defaults {
         DefaultsKey.scrollInverterHorizontalEnabled: false,
         DefaultsKey.scrollHorizontalEnabled: false,
         DefaultsKey.scrollHorizontalModifier: ScrollHorizontalModifier.shift.rawValue,
-        DefaultsKey.verticalZoomEnabled: false,
-        DefaultsKey.verticalZoomModifier: ScrollZoomModifier.command.rawValue,
         DefaultsKey.pinchZoomEnabled: false,
         DefaultsKey.pinchZoomModifier: ScrollZoomModifier.control.rawValue,
         DefaultsKey.focusFollowsMouseEnabled: false,
@@ -1292,6 +1291,8 @@ enum Defaults {
         DefaultsKey.switcherTakeOverSystemShortcuts: false,
         DefaultsKey.switcherShortcut: "command:48",
         DefaultsKey.switcherWindowShortcut: GlobalShortcut.switcherWindowDefault.storageValue,
+        DefaultsKey.switcherAllWindowsShortcut: GlobalShortcut.switcherAllWindowsDefault.storageValue,
+        DefaultsKey.switcherAllWindowsShortcutEnabled: false,
         DefaultsKey.switcherIconRowMode: false,
         DefaultsKey.switcherSimpleMode: false,
         DefaultsKey.switcherMergeTabs: false,
@@ -1500,6 +1501,7 @@ enum Defaults {
         DefaultsKey.notchCalendarExcluded: [String](),
         DefaultsKey.notchAgentsEnabled: false,
         DefaultsKey.notchAgentsClaude: true,
+        DefaultsKey.notchAgentsClaudeProfile: "",
         DefaultsKey.notchAgentsCodex: true,
         DefaultsKey.notchAgentsCodexProfiles: "",
         DefaultsKey.notchAgentsOpenCode: true,

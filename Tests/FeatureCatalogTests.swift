@@ -1562,9 +1562,9 @@ enum FeatureCatalogTests {
         suite.expect(activeSet(.accessibility, on: [DefaultsKey.scrollInverterHorizontalEnabled])
                 .contains(.scrollInverter),
                "horizontal-only inversion counts as using accessibility")
-        suite.expect(activeSet(.accessibility, available: [.scrollZoom], on: [DefaultsKey.verticalZoomEnabled])
+        suite.expect(activeSet(.accessibility, available: [.scrollZoom], on: [DefaultsKey.pinchZoomEnabled])
                 == [.scrollZoom]
-                && activeSet(.accessibility, available: [], on: [DefaultsKey.verticalZoomEnabled]).isEmpty,
+                && activeSet(.accessibility, available: [], on: [DefaultsKey.pinchZoomEnabled]).isEmpty,
                "Zoom alone owns accessibility only while installed")
         suite.expect(AppFeature.scrollInverter.enabledKeys == [DefaultsKey.scrollInverterEnabled,
                                                            DefaultsKey.scrollInverterHorizontalEnabled],
@@ -1744,10 +1744,10 @@ enum FeatureCatalogTests {
                "a role leaves the shortcuts page when its feature is off in the hub")
         suite.expect(GlobalShortcutRole.activeRoles(isOn: { _ in true },
                                               isAvailable: { $0 != .switcher })
-                .allSatisfy { $0 != .switcher && $0 != .switcherWindow },
-               "both switcher roles follow the switcher feature")
+                .allSatisfy { $0.feature != .switcher },
+               "all switcher roles follow the switcher feature")
         suite.expect(GlobalShortcutRole.availableRoles(isAvailable: { $0 != .switcher })
-                .allSatisfy { $0 != .switcher && $0 != .switcherWindow },
+                .allSatisfy { $0.feature != .switcher },
                "the shortcut editor lists installed roles even without reading enable keys")
         for role in [GlobalShortcutRole.displayBrightnessDecrease, .displayBrightnessIncrease] {
             suite.expect(role.feature == .brightness && role.group == .energyDisplay,
