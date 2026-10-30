@@ -1529,6 +1529,7 @@ enum ClipboardFeatureTests {
 
         ClipboardHistoryWriteTests.run(suite)
         ClipboardHistoryImageEditorTests.run(suite)
+        ClipboardPreviewLayoutTests.run(suite)
         ClipboardHistoryAccessTests.run(suite)
 
         let pasteboardAccess = GeneralPasteboardAccess(label: "Vorssaint.Tests.PasteboardAccess")
