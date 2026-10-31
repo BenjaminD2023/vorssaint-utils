@@ -47,6 +47,11 @@ def availability_declaration(path, prefix):
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    write("LowPowerModeRuntime.swift", "import Combine\nimport Foundation\n"
+          + "extension LowPowerModeTests {\n"
+          + declaration("Sources/Vorssaint/Services/Metrics/LowPowerModeService.swift",
+                        "final class LowPowerModeService:")
+          + "}\n")
     write("SettingsCommandDispatch.swift", "import Foundation\n"
           + "extension SettingsFeatureTests.CommandDispatchHost {\nstatic func run() {\n"
           # Both app entry points are named main.swift. Keep diagnostics in

@@ -27,6 +27,7 @@ final class PanelInteractionState {
     var preventsPopoverDismissal: Bool {
         viewKeepsPopoverOpen
             || isPresentingPopoverModal
+            || LowPowerModeService.shared.isChanging
             || AirPlayRouteManager.isPresentingPicker
             || HomebrewManager.shared.operationStatus?.isActive == true
             || cleanerIsRunning

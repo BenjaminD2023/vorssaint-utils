@@ -386,6 +386,7 @@ if (( TEST )); then
         Sources/Vorssaint/Core/GeneralSettingsStrings.swift
         Sources/Vorssaint/Core/SettingsPageStrings.swift
         Sources/Vorssaint/Core/BatteryTimeStrings.swift
+        Sources/Vorssaint/Core/LowPowerModeStrings.swift
         Sources/Vorssaint/Core/CPUCoreStrings.swift
         Sources/Vorssaint/Core/MonitorLayoutStrings.swift
         Sources/Vorssaint/Core/KeepAwakeStrings.swift
@@ -399,6 +400,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/ChargeControl/ChargeControlSupport.swift
         Sources/Vorssaint/Services/ChargeControl/ChargeControlHardware.swift
         Sources/Vorssaint/Services/Metrics/BatteryPowerStateSupport.swift
+        Sources/Vorssaint/Services/Metrics/LowPowerModeSupport.swift
         Sources/Vorssaint/Services/Snippets/TextSnippetSupport.swift
         Sources/Vorssaint/Services/RadialMenu/RadialMenuSupport.swift
         Sources/Vorssaint/Services/QuickTools/ScratchpadSupport.swift

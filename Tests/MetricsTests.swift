@@ -15,6 +15,7 @@ struct MetricsTests {
                 PreferenceNamespaceTests.run(suite)
             }),
             ("fork-appearance", { ForkAppearanceTests.run(suite) }),
+            ("low-power-mode", { LowPowerModeTests.run(suite) }),
             ("fork-charge", {
                 ForkChargeControlTests.run(suite)
                 ChargeControlHardwareTests.run()
