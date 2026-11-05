@@ -172,15 +172,24 @@ enum QuitAppsRuntimeTests {
         first.quitRequests = 0; second.quitRequests = 0; kept.quitRequests = 0
         service.showQuitApps(scope: .allExceptFront)
         controller.handleKey(NSEvent(keyCode: UInt16(kVK_Return)))
-        drain()
+        drain(timeout: 2) {
+            first.quitRequests == 0 && second.quitRequests == 1 && kept.quitRequests == 0
+                && own.quitRequests == 0 && controller.model == nil
+        }
         suite.expect(first.quitRequests == 0 && second.quitRequests == 1 && kept.quitRequests == 0
                      && own.quitRequests == 0 && controller.model == nil,
-                     "confirming all-except-front dispatches only the eligible app, then closes")
+                     "confirming all-except-front dispatches only the eligible app, then closes; "
+                     + "requests first=\(first.quitRequests), second=\(second.quitRequests), kept=\(kept.quitRequests), own=\(own.quitRequests); model open=\(controller.model != nil)")
         service.showQuitApps(scope: .all)
         controller.handleKey(NSEvent(keyCode: UInt16(kVK_Return), modifierFlags: .command))
-        drain()
-        suite.expect(first.quitRequests == 1 && second.quitRequests == 2 && kept.quitRequests == 0,
-                     "a fresh all-apps confirmation preserves every exception")
+        drain(timeout: 2) {
+            first.quitRequests == 1 && second.quitRequests == 2 && kept.quitRequests == 0
+                && own.quitRequests == 0 && controller.model == nil
+        }
+        suite.expect(first.quitRequests == 1 && second.quitRequests == 2 && kept.quitRequests == 0
+                     && own.quitRequests == 0 && controller.model == nil,
+                     "a fresh all-apps confirmation preserves every exception and closes; "
+                     + "requests first=\(first.quitRequests), second=\(second.quitRequests), kept=\(kept.quitRequests), own=\(own.quitRequests); model open=\(controller.model != nil)")
 
         service.showQuitApps()
         AssistiveKeyboard.ownsPoint = true
@@ -221,5 +230,12 @@ enum QuitAppsRuntimeTests {
 
     private static func drain(until deadline: Date = Date(timeIntervalSinceNow: 0.04)) {
         while Date() < deadline { _ = RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01)) }
+    }
+
+    private static func drain(timeout: TimeInterval, until condition: () -> Bool) {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while !condition() && ProcessInfo.processInfo.systemUptime < deadline {
+            _ = RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+        }
     }
 }
