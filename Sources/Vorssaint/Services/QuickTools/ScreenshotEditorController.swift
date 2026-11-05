@@ -1383,6 +1383,7 @@ final class ScreenshotEditorModel: ObservableObject, BackdropEditing {
 /// effect: clipboard, files, pins, text recognition and the close-confirm.
 final class ScreenshotEditorController: NSObject, NSWindowDelegate {
     let model: ScreenshotEditorModel
+    let sourceFormat: MediaImageFormat
     private var window: NSWindow?
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
@@ -1399,6 +1400,7 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
     init(capture: ScreenshotSelectionController.Capture, clipboardImage: Bool = false) {
         model = ScreenshotEditorModel(image: capture.image, scale: capture.scale,
                                       clipboardImage: clipboardImage)
+        sourceFormat = capture.sourceFormat
         super.init()
     }
 
@@ -1667,7 +1669,7 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
     func shareFile() -> URL? {
         guard let export = model.exportImage() else { return nil }
         return ScreenshotService.temporaryExportFile(image: export.image, scale: export.scale,
-                                                     strings: strings)
+                                                     strings: strings, preferredFormat: sourceFormat)
     }
 
     /// Every final output closes the editor: the capture leaves the app
@@ -1764,11 +1766,12 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
 
     func save() {
         guard let export = model.exportImage(),
-              let data = ScreenshotRenderer.pngData(from: export.image, scale: export.scale)
+              let file = ScreenshotImageFile.encode(export, preferredFormat: sourceFormat)
         else { return }
-        let (url, consumedNumber) = ScreenshotService.saveDestination(strings: strings)
+        let (url, consumedNumber) = ScreenshotService.saveDestination(
+            strings: strings, fileExtension: file.format.fileExtension)
         do {
-            try data.write(to: url, options: .atomic)
+            try file.data.write(to: url, options: .atomic)
             ScreenshotSupport.markAsScreenCapture(url)
             model.markExported()
             QuickToolHUD.show(icon: "camera.viewfinder",
@@ -1784,18 +1787,16 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
     }
 
     func saveAs() {
-        guard let window else { return }
+        guard let window, let export = model.exportImage(),
+              let file = ScreenshotImageFile.encode(export, preferredFormat: sourceFormat) else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
+        panel.allowedContentTypes = [file.format.contentType]
         panel.nameFieldStringValue = ScreenshotSupport.fileName(
-            prefix: strings.fileNamePrefix, date: Date())
+            prefix: strings.fileNamePrefix, date: Date(), fileExtension: file.format.fileExtension)
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
-            guard let export = self.model.exportImage(),
-                  let data = ScreenshotRenderer.pngData(from: export.image, scale: export.scale)
-            else { return }
             do {
-                try data.write(to: url, options: .atomic)
+                try file.data.write(to: url, options: .atomic)
                 self.model.markExported()
                 self.window?.close()
             } catch {
@@ -1808,10 +1809,11 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
     /// capture, and the editor closes as it does after Save.
     func addToShelf() {
         guard let export = model.exportImage(),
-              let data = ScreenshotRenderer.pngData(from: export.image, scale: export.scale)
+              let file = ScreenshotImageFile.encode(export, preferredFormat: sourceFormat)
         else { return }
-        let name = ScreenshotSupport.fileName(prefix: strings.fileNamePrefix, date: Date())
-        guard ShelfService.shared.shelveGeneratedFile(data, named: name) != nil else {
+        let name = ScreenshotSupport.fileName(prefix: strings.fileNamePrefix, date: Date(),
+                                             fileExtension: file.format.fileExtension)
+        guard ShelfService.shared.shelveGeneratedFile(file.data, named: name) != nil else {
             NSSound.beep()
             return
         }
