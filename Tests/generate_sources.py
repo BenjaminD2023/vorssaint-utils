@@ -758,9 +758,10 @@ def main():
     write("ClipboardPanelPlacement.swift", "import AppKit\n"
           + "extension ClipboardFeatureTests.PanelPlacementHost {\n"
           + "".join(declaration(clipboard, prefix).replace("private func", "func", 1) for prefix in [
+              "    private func observePanelGeometry(", "    private func savePanelPosition(",
               "    private func refreshQuickLayout(", "    private func panelMinimumContentSize(",
               "    private func preferredPanelSize(", "    private func savePanelSize(",
-              "    private func position("])
+              "    private func position(", "    private func resize("])
           + "}\nextension ClipboardFeatureTests {\n"
           + declaration(clipboard, "private final class ClipboardPanelSizeLimit").replace(
               "private final class", "final class", 1)
@@ -855,15 +856,22 @@ def main():
                     for prefix in ["    struct RowAction:", "    private func skinToneActions(",
                                    "    private func recordUsage(", "    private func finish("])
           + "}\n")
+    write("MixedStateCheckbox.swift", "import AppKit\nimport SwiftUI\n"
+          + declaration("Sources/Vorssaint/UI/SharedUI.swift", "struct MixedStateCheckbox:"))
     write("UninstallerFlow.swift", "import AppKit\nimport Carbon.HIToolbox\nimport Combine\n"
           + "extension UninstallerFlowTests {\n"
           + declaration(uninstall, "    enum Phase:")
+          + declaration(uninstall, "    enum Category:")
           + declaration(bar, "    enum Mode:")
           + "final class Uninstaller: UninstallerState {\nstatic let shared = Uninstaller()\n"
+          + "".join(line + "\n" for line in (ROOT / uninstall).read_text().splitlines()
+                    if line.startswith(("    var selectedSize:", "    var totalSize:")))
           + "".join(declaration(uninstall, prefix) for prefix in [
+              "    var selectedHomebrewPackage:", "    var isRemovingWithHomebrew:",
               "    var isRemoving: Bool", "    var canRemoveSelected: Bool", "    func select(appURL:",
               "    func retryHomebrewCheck()",
-              "    func reset()", "    func setInclude(", "    struct HomebrewRemovalConfirmation",
+              "    func reset()", "    func setInclude(", "    func setAllIncluded(",
+              "    var bulkSelection:", "    struct HomebrewRemovalConfirmation",
               "    var homebrewRemovalConfirmation:", "    func removeSelectedWithHomebrew("])
           + "}\nfinal class Service: ServiceState {\n"
           + "".join(declaration(bar, prefix).replace("private func", "func", 1) for prefix in [
@@ -1915,6 +1923,51 @@ def main():
           + "}\n}\n")
     switcher = "Sources/Vorssaint/UI/Switcher/SwitcherView.swift"
     switcher_service = "Sources/Vorssaint/Services/Switcher/AppSwitcher.swift"
+    # Exercise the input and close paths themselves, with only OS effects,
+    # layout and scheduling supplied by the fixture. No app windows are shown.
+    click_bodies = re.findall(
+        r"(?:onCommit|onSelect): \{\n(\s+switcher\.select\(index: (?:index|entry\.offset)\)\n"
+        r"\s+switcher\.commitSession\(\)\n)\s*\}", (ROOT / switcher).read_text())
+    click_names = ["clickCard", "clickPreview", "clickTitle", "clickAppIcon", "clickWindowIcon"]
+    if len(click_bodies) != len(click_names):
+        raise ValueError("Expected all five switcher click callbacks")
+    write("SwitcherHoverSelection.swift", "import AppKit\nimport Combine\n"
+          + "extension SwitcherHoverSelectionTests {\n"
+          + declaration(switcher_service, "private struct SwitcherSourceContext").replace("private struct", "struct", 1)
+          + declaration(switcher_service, "    private enum KeyCode {").replace("private enum", "enum", 1)
+          + "final class Service: Fixture, ObservableObject {\n"
+          + declaration(switcher_service, "    @Published private(set) var selectedIndex").replace("private(set) ", "", 1)
+          + "".join(declaration(switcher_service, prefix).replace("private ", "", 1)
+                    for prefix in ["    private func handle(type:", "    private func handleKeyDown(",
+                                   "    func select(index:", "    func hoverSelect(index:",
+                                   "    func hoverSelectEnded(", "    func hoverSelectIconRow(index:",
+                                   "    func hoverSelectIconRowEnded(", "    private var selectedItemID:",
+                                   "    private func handleShiftBackNavigation(", "    private func consumesShiftBackChordTab(",
+                                   "    private func advanceSelection(", "    private func advanceAppSelection(",
+                                   "    private func advanceWindowInSelectedApp(", "    private func moveSelection(",
+                                   "    private func moveIconRowSelection(", "    private func printableSearchText(",
+                                   "    private func sanitizedSearchInput(", "    private func appendSearchText(",
+                                   "    private func removeLastSearchCharacter(", "    private func applySearchFilter(",
+                                   "    private func pinSearch(", "    func closeWindow(",
+                                   "    private func closeSelectedWindow(", "    private func finishClosingWindow(",
+                                   "    private func applyClosedWindowRemoval(", "    private func finishTrackingClose(",
+                                   "    func commitSession(", "    private func resumePendingCommitAfterClose(",
+                                   "    private func cancelSession(", "    private func endSession(",
+                                   "    private func dismissForClickOutsidePanel(", "    private var iconRowItemCount:",
+                                   "    private func iconRowIndex(", "    private func selectionIndex(forIconRowIndex",
+                                   "    private func revealSelectedIconInVisibleRow(", "    private func beginIconRowEdgeHoverIfNeeded(",
+                                   "    private func stepIconRowFromEdgeHover(", "    private func bounceIconRow(",
+                                   "    private func cancelIconRowEdgeHover("])
+          + "".join("func " + name + "(index: Int) {\n"
+                    + body.replace("switcher.", "self.").replace("entry.offset", "index") + "}\n"
+                    for name, body in zip(click_names, click_bodies))
+          + "}\n"
+          + "".join("struct " + name + " {\nlet window: SwitcherItem\nvar minimalPreviews = false\nvar isHovering = false\n"
+                    + declaration(switcher, "    private var showsCloseButton:", scope=scope).replace("private ", "", 1)
+                    + "}\n" for name, scope in [
+                        ("Card", "private struct WindowCard: View {"),
+                        ("Preview", "private struct SwitcherWindowPreviewTile: View {")])
+          + "}\n")
     write("SwitcherAllWindows.swift", "import AppKit\n"
           + "extension SwitcherAllWindowsTests.Model {\n"
           + "".join(declaration(switcher_service, prefix).replace("private ", "", 1)
@@ -2537,11 +2590,18 @@ def main():
               "    private static func seconds(of event: CGEvent)",
               "    private func handleEdgeSnapInput(",
               "    private func applyDelayedEdgeSnapIfMoved(",
+              "    private func finishEdgeSnapRelease(",
               "    private func edgeSnapWindowFollowed(",
               "    private func beginEdgeSnapResolve(",
               "    private func resolveEdgeSnapWindow(",
               "    private func makeEdgeSnapDrag(",
               "    private func updateEdgeSnapDrag(",
+              "    private func restoreSnappedWindowIfNeeded(",
+              "    private func canRestoreSnappedWindow(",
+              "    private func edgeSnapWindowIsEligible(",
+              "    private func finishSnappedWindowRestore(",
+              "    private func isSnapped(",
+              "    private func cancelSettle(",
               "    private func edgeSnapTarget(",
               "    private var edgeSnapLayout:",
               "    private func scheduleEdgeSnapStillCheck()",
