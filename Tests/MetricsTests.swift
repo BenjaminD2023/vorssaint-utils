@@ -119,11 +119,13 @@ struct MetricsTests {
             }),
             ("recorder", {
                 RecorderGIFWriterTests.run(suite)
+                RecorderFastGIFWriterTests.run(suite)
                 RecorderFeatureTests.run(suite)
                 RecorderZoomAimingTests.run(suite)
                 RecorderExportSpeedTests.run(suite)
                 RecorderExportControlsTests.run(suite)
                 RecorderExportRenderingTests.run(suite)
+                RecorderFastGIFExportTests.run(suite)
             }),
             ("command-bar", {
                 CommandBarFeatureTests.run(suite)
@@ -214,6 +216,7 @@ struct MetricsTests {
             }),
             ("uninstaller", {
                 HomebrewOwnershipTests.run(suite)
+                HomebrewOperationLogRetentionTests.run(suite)
                 UninstallerFlowTests.run(suite)
                 UninstallerBulkSelectionTests.run(suite)
                 MixedStateCheckboxTests.run(suite)
