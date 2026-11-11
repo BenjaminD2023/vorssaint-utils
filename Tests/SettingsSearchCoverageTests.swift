@@ -117,7 +117,7 @@ enum SettingsSearchCoverageTests {
     }
 
     private static func checkMetricAppearanceSearch(_ suite: TestSuite) {
-        let domain = "vorssaint-settings-appearance-search-\(UUID().uuidString)"
+        let domain = "com.vorssaint.tests.settings-appearance-search.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: domain) else {
             suite.expect(false, "appearance search gets isolated preferences")
             return
