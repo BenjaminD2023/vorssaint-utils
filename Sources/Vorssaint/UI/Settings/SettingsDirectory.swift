@@ -15,7 +15,7 @@ struct SettingsSearchState: Equatable {
 
     init(defaults: UserDefaults, hardware: Hardware) {
         self.hardware = hardware
-        bars = defaults.string(forKey: DefaultsKey.menuBarMetricAppearance) == "bars"
+        bars = MenuBarMetricAppearance.anyUsesBars(in: defaults)
         batteryRest = defaults.string(forKey: DefaultsKey.notchIdleContent) == NotchIdleContent.battery.rawValue
         capsule = defaults.string(forKey: DefaultsKey.notchSilhouette) != NotchSilhouette.notch.rawValue
         customSize = defaults.string(forKey: DefaultsKey.notchSize) == NotchSize.custom.rawValue
@@ -386,7 +386,7 @@ enum SettingsDirectory {
                                         (.monitorNetwork, [FeatureStrings.monitorLayout(language).networkSpeedUnit]),
                                         (.fanControl, [FeatureStrings.fanControl(language).menuBarTitle]),
                                        ], terms: [
-                                        .init([s.monitorCombineTemperatures], when: !state.bars),
+                                        .init([s.monitorCombineTemperatures]),
                                         .init([barStyle.customize, barStyle.normalColor, barStyle.mediumColor, barStyle.highColor,
                                                barStyle.mediumFrom, barStyle.highFrom], when: state.bars),
                                        ]),

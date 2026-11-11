@@ -239,7 +239,7 @@ enum SettingsFeatureTests {
         for bars in [false, true, false] {
             defaults.set(bars ? "bars" : "values", forKey: DefaultsKey.menuBarMetricAppearance)
             verify(colors.normalColor, opens: monitor, commandID: "settings.monitor", shown: bars)
-            verify(Strings.enUS.monitorCombineTemperatures, opens: monitor, commandID: "settings.monitor", shown: !bars)
+            verify(Strings.enUS.monitorCombineTemperatures, opens: monitor, commandID: "settings.monitor")
         }
 
         let monitorAlerts = FeatureSettingsDestination(.monitor, sectionAnchor: .monitorAlerts)

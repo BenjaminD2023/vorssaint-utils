@@ -34,6 +34,7 @@ enum SettingsSearchCoverageTests {
     ]
 
     static func run(_ suite: TestSuite) {
+        checkMetricAppearanceSearch(suite)
         let resolver = Resolver(sourceRoot: "Sources/Vorssaint")
         var indexed = Set<String>()
         for source in searchSources {
@@ -113,6 +114,55 @@ enum SettingsSearchCoverageTests {
         let builtWords = resolver.searchWords(in: built, declaration: "static func sections(", selfType: nil)
         suite.expect(builtWords == ["NotchStrings.title"],
                      "a label in a local that no keyword list reads is not a search word: \(builtWords ?? [])")
+    }
+
+    private static func checkMetricAppearanceSearch(_ suite: TestSuite) {
+        let domain = "vorssaint-settings-appearance-search-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: domain) else {
+            suite.expect(false, "appearance search gets isolated preferences")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let hardware = SettingsSearchState.Hardware(
+            battery: true, notchedDisplay: true, plainDisplay: true,
+            keyboardLight: true, bluetoothSleep: true, brightnessOSD: true)
+        let keys = MenuBarMetricAppearance.barCapableAppearanceKeys
+        let colors = FeatureStrings.menuBarAppearance(.enUS)
+        func state() -> SettingsSearchState { SettingsSearchState(defaults: defaults, hardware: hardware) }
+        func verify(palette: Bool, _ label: String) {
+            let snapshot = state()
+            suite.expect(snapshot.bars == palette, "\(label): the search cache tracks effective metric appearance")
+            let items = SettingsDirectory.searchItems(.enUS, language: .enUS, state: snapshot)
+            func monitorMatch(_ title: String) -> Bool {
+                SettingsSearchSupport.groupedMatchingItems(
+                    query: title, items: items, isAvailable: { _ in true })
+                    .flatMap(\.suggestions).contains {
+                        $0.title == title && SettingsSearchSupport.route(for: $0, isAvailable: { _ in true })
+                            .destination == FeatureSettingsDestination(.monitor)
+                    }
+            }
+            suite.expect(monitorMatch(colors.normalColor) == palette,
+                         "\(label): search offers bar colors exactly while the Monitor palette is visible")
+            suite.expect(monitorMatch(Strings.enUS.monitorCombineTemperatures),
+                         "\(label): Combine Temperatures stays searchable in every metric style")
+        }
+
+        defaults.set("values", forKey: DefaultsKey.menuBarMetricAppearance)
+        let inheritedValues = state()
+        verify(palette: false, "all inherited Values")
+        for key in keys {
+            defaults.set("bars", forKey: key)
+            suite.expect(state() != inheritedValues, "\(key): a Bars override invalidates the search cache")
+            verify(palette: true, "Values with \(key) Bars")
+            defaults.removeObject(forKey: key)
+        }
+        suite.expect(state() == inheritedValues, "removing the last Bars override restores the search state")
+        defaults.set("bars", forKey: DefaultsKey.menuBarMetricAppearance)
+        verify(palette: true, "all inherited Bars")
+        for key in keys { defaults.set("values", forKey: key) }
+        verify(palette: false, "global Bars with every metric overridden to Values")
+        defaults.set("bars", forKey: DefaultsKey.menuBarBatteryAppearance)
+        verify(palette: true, "mixed explicit Values and battery Bars")
     }
 
     struct Unresolved: Error, CustomStringConvertible {
