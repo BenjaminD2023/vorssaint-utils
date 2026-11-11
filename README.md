@@ -184,7 +184,7 @@ Reorder or hide panel sections, choose a compact layout, and export settings to 
 - **Charge limit.** Set a charging ceiling (20–100%), a sailing range, temporarily top up to 100%, switch to battery power until stopped, or calibrate the battery. On macOS 27, native limits use 80–100% in 5% steps. Off by default in Features; uses a protected helper.
 
 - **Keep awake.** Keep your Mac working on a timer, with the lid closed, or while selected apps, power or external displays are present.
-- **Displays.** Control individual displays and brightness, with hardware control where supported, half or quarter steps for the brightness keys, optional extra dimming below a monitor's minimum, and software dimming as a fallback.
+- **Displays.** Control individual displays and brightness, with hardware control where supported, half or quarter steps for the brightness keys, optional extra dimming below a monitor's minimum, software dimming as a fallback, and the volume and mute of a monitor's built-in speakers.
 - **Extra brightness.** Use a MacBook Pro XDR display's HDR headroom to go beyond its normal maximum brightness.
 - **Bluetooth on sleep.** Disconnect Bluetooth during sleep and restore it on wake only if Vorssaint turned it off.
 
