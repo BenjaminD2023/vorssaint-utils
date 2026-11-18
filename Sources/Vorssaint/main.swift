@@ -9,6 +9,11 @@ if let command = SettingsBackupSupport.command(in: CommandLine.arguments) {
     SettingsBackup.runCommandAndExit(command)
 }
 
+// Diagnostics must not migrate live preferences or recover active input mappings.
+if CommandLine.arguments.contains("--selftest") {
+    SelfTest.runAndExit()
+}
+
 SuperKeyMappingGuard.runIfRequestedAndExit()
 Defaults.register()
 let configuredFeatureKeys = SettingsBackup.applyConfigFileAtLaunch()
@@ -16,9 +21,6 @@ NotchControlItem.keyboardLightIsSupported = { BrightnessService.keyboardLightIsS
 MouseAccelerationGuard.runIfRequestedAndExit()
 MouseAccelerationService.recoverPendingAtLaunch()
 
-if CommandLine.arguments.contains("--selftest") {
-    SelfTest.runAndExit()
-}
 if CommandLine.arguments.contains("--sensors") {
     SensorDump.runAndExit()
 }

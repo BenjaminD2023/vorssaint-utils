@@ -94,11 +94,16 @@ enum SelfTest {
             warnings.append("no power metrics on this Mac")
         }
 
-        UserDefaults.standard.set("ok", forKey: "selftest")
-        if UserDefaults.standard.string(forKey: "selftest") != "ok" {
+        let probeDomain = "com.vorssaint.selftest.\(UUID().uuidString)"
+        if let defaults = UserDefaults(suiteName: probeDomain) {
+            defer { defaults.removePersistentDomain(forName: probeDomain) }
+            defaults.set("ok", forKey: "selftest")
+            if defaults.string(forKey: "selftest") != "ok" {
+                failures.append("UserDefaults")
+            }
+        } else {
             failures.append("UserDefaults")
         }
-        UserDefaults.standard.removeObject(forKey: "selftest")
 
         for style in KeepAwakeActiveIcon.allCases {
             guard let image = BlackHoleGlyph.activeImage(style: style, tint: .orange) else {
