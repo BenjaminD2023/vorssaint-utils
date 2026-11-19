@@ -7,6 +7,21 @@ import AppKit
 /// isolated preferences and readings. No status item or hardware is opened.
 enum MenuBarBatteryWarningTests {
     enum ReviewDefaults { static var current: UserDefaults! }
+
+    /// Keep this fixed rendering matrix independent of NSCache's legal
+    /// resource-pressure eviction. Production still uses its bounded NSCache.
+    /// Each case explicitly clears this cache, as does the suite's defer.
+    final class RetainedImageCache {
+        private var images: [NSString: NSImage] = [:]
+
+        func object(forKey key: NSString) -> NSImage? { images[key] }
+
+        func setObject(_ image: NSImage, forKey key: NSString, cost _: Int) {
+            images[key] = image
+        }
+
+        func removeAllObjects() { images.removeAll() }
+    }
     enum MenuBarMetric { case battery, batteryTemperature }
     struct SystemSnapshot {
         var power: PowerReading?
@@ -23,7 +38,7 @@ enum MenuBarBatteryWarningTests {
         typealias MenuBarMetricSpacing = MenuBarBatteryWarningTests.MenuBarMetricSpacing
         typealias MenuBarMetricAppearance = MenuBarBatteryWarningTests.MenuBarMetricAppearance
         typealias MenuBarSpacingSupport = MenuBarBatteryWarningTests.MenuBarSpacingSupport
-        static let blockImageCache = NSCache<NSString, NSImage>()
+        static let blockImageCache = RetainedImageCache()
         static let legacyBlockAttachmentNudge: CGFloat = 0
         static var style = MenuBarBlockStyle.dense
         static var overrideSegments: [MenuBarSegment]?
@@ -148,6 +163,9 @@ enum MenuBarBatteryWarningTests {
                     let amber = image(metrics: metrics)
                     defaults.set(false, forKey: DefaultsKey.notchLowBatteryTint)
                     let recovered = image(metrics: metrics)
+                    Renderer.blockImageCache.removeAllObjects()
+                    let rebuilt = image(metrics: metrics)
+                    let rebuiltAgain = image(metrics: metrics)
                     defaults.set(true, forKey: DefaultsKey.notchLowBatteryTint)
                     defaults.set(10, forKey: DefaultsKey.notchLowBatteryThreshold)
                     guard let plain, let red, let amber, let recovered else {
@@ -161,6 +179,21 @@ enum MenuBarBatteryWarningTests {
                     suite.expect(matchingPixels(red, color: .systemRed) > 0 && matchingPixels(amber, color: .systemOrange) > 0
                                  && matchingPixels(plain, color: .systemRed) == 0 && matchingPixels(plain, color: .systemOrange) == 0,
                                  "the real attributed-image path draws red and amber, then returns to the normal text color")
+                    guard let rebuilt, let rebuiltAgain else {
+                        suite.expect(false, "cleared battery images are rebuilt as real attachments")
+                        continue
+                    }
+                    suite.expect(rebuilt !== recovered,
+                                 "an explicit cache clear rebuilds the untinted image instead of retaining the old object")
+                    suite.expect(rebuiltAgain === rebuilt,
+                                 "the rebuilt untinted image is reused on the next cache hit")
+                    suite.expect(rebuilt.size == plain.size,
+                                 "an untinted cache miss preserves the original block geometry")
+                    let normalColor: NSColor = metrics.count == 1 ? .textColor : .labelColor
+                    suite.expect(matchingPixels(rebuilt, color: normalColor) > 0
+                                 && matchingPixels(rebuilt, color: .systemRed) == 0
+                                 && matchingPixels(rebuilt, color: .systemOrange) == 0,
+                                 "an untinted cache miss redraws normal-color ink without a stale red or amber warning")
                 }
             }
         }
