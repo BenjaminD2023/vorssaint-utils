@@ -108,7 +108,7 @@ enum ClipboardImageCaptureTests {
 
             board.clearContents()
             board.setData(jpeg, forType: .init("public.jpeg"))
-            if case .image(let preview)? = Reader.readPasteboard(includeImagesFiles: true) {
+            if case .image(let preview, _)? = Reader.readPasteboard(includeImagesFiles: true) {
                 suite.expect(preview.width == 32 && preview.height == 64,
                              "native JPEG-only clipboard images are normalized and captured")
             } else { suite.expect(false, "native JPEG clipboard image is recognized") }
