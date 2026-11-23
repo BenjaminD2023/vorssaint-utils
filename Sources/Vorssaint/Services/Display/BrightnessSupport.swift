@@ -935,7 +935,7 @@ enum BrightnessSupport {
     /// monitor reported. The transport checks the target before each write.
     static func applySpeakerChange(
         _ change: SpeakerChange, hasNativeMute: Bool, unmutesLeavingZero: Bool,
-        keySettings: MonitorVolumeKeySettings, unmuteCeiling: (UInt16) -> UInt16,
+        keySettings: MonitorVolumeKeySettings, unmuteCeiling: (UInt16) -> UInt16, canVerifyUnmute: () -> Bool,
         restore: inout SpeakerLevel?, needsUnmute: inout Bool,
         read: (UInt8) -> VCPReading?, write: (UInt8, UInt16) -> Bool
     ) -> (level: SpeakerLevel, muted: Bool?)? {
@@ -1009,7 +1009,11 @@ enum BrightnessSupport {
             guard target > 0 else { return (initial, muted) }
         }
 
-        if unmutesLeavingZero && initial.raw == 0 && target > 0 { needsUnmute = true }
+        let releasesZeroLatch = !hasNativeMute && unmutesLeavingZero && target > 0 && (initial.raw == 0 || needsUnmute)
+        if (hasNativeMute && desiredMute == false) || releasesZeroLatch {
+            guard canVerifyUnmute() else { return nil }
+        }
+        if releasesZeroLatch { needsUnmute = true }
         var confirmed = initial
         if target != initial.raw {
             guard write(audioVolumeCode, target),
@@ -1018,7 +1022,7 @@ enum BrightnessSupport {
             confirmed = actual
         }
         if !hasNativeMute {
-            if unmutesLeavingZero, needsUnmute, confirmed.raw > 0 {
+            if releasesZeroLatch {
                 guard confirmed.raw <= keySettings.ceiling(for: confirmed.maximum),
                       write(audioMuteCode, audioUnmutedValue) else { return nil }
                 // Firmware can restore its previous (loud) level as part of unmute.
@@ -1221,5 +1225,89 @@ enum BrightnessSupport {
                       && $0.score >= best.score
               }) else { return nil }
         return best.serviceOrdinal
+    }
+}
+
+/// Each mounted slider waits for both the end of its edit and the monitor's
+/// confirmation of its last request. Either can arrive first.
+final class SpeakerSliderFeedback {
+    struct Endpoint {
+        let registryEntryID: UInt64?
+        let fallbackService: CFTypeRef?
+        let chipAddress: UInt32
+
+        func matches(_ live: Self, confirmedOwnWrite: Bool = false) -> Bool {
+            guard chipAddress == live.chipAddress else { return false }
+            if let id = registryEntryID, let liveID = live.registryEntryID {
+                return id == liveID
+            }
+            // A rescan can wrap the same proxy again. An unidentified wrapper
+            // cannot inherit another's write, but this request can confirm its own.
+            return confirmedOwnWrite || fallbackService === live.fallbackService
+        }
+    }
+
+    typealias Confirmation = (endpoint: Endpoint, wrote: Bool)
+
+    /// Consecutive requests from one drag can land on the same hardware step.
+    /// Only the serial DDC queue records and verifies these writes.
+    final class Writes {
+        private var endpoint: Endpoint?
+        var volume: BrightnessSupport.SpeakerLevel?
+        var muted: Bool?
+
+        func begin(on endpoint: Endpoint) {
+            guard self.endpoint?.matches(endpoint) != true else { return }
+            self.endpoint = endpoint
+            volume = nil
+            muted = nil
+        }
+    }
+
+    final class Request {
+        private weak var owner: SpeakerSliderFeedback?
+        private(set) weak var previous: Request?
+        var writes = Writes()
+
+        fileprivate init(owner: SpeakerSliderFeedback, previous: Request?) {
+            self.owner = owner
+            self.previous = previous
+        }
+
+        func confirmed(_ play: @escaping () -> Void) {
+            guard let owner, owner.latest === self else { return }
+            owner.playOnRelease = play
+            owner.playIfReady()
+        }
+    }
+
+    private var editing = false
+    private var latest: Request?
+    private var playOnRelease: (() -> Void)?
+
+    func request() -> Request {
+        // Arrow keys and accessibility actions may send a single value write.
+        let request = Request(owner: self, previous: editing ? latest : nil)
+        latest = request
+        playOnRelease = nil
+        return request
+    }
+
+    func editingChanged(_ editing: Bool) {
+        if editing { cancel() }
+        self.editing = editing
+        playIfReady()
+    }
+
+    func cancel() {
+        editing = false
+        latest = nil
+        playOnRelease = nil
+    }
+
+    private func playIfReady() {
+        guard !editing, let play = playOnRelease else { return }
+        cancel()
+        play()
     }
 }

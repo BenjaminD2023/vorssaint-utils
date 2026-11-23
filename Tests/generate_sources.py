@@ -169,6 +169,7 @@ def main():
                     .replace("private ", "", 1) for prefix in [
                         "    struct DisplayScope:", "    struct WindowList {", "    struct AppSnapshot:",
                         "    struct Snapshot:", "    static func enumerateSwitcherWindows(",
+                        "    static func rememberSwitcherWindows(",
                         "    static func beginSourcePrefetch(",
                         "    private struct WalkApps {",
                         "    private static func walkApps(",
@@ -201,6 +202,12 @@ def main():
           + declaration("Sources/Vorssaint/Services/Switcher/WindowUseTracker.swift",
                         "    func reconcile(")
           + "}\n")
+    (OUTPUT / "SwitcherWindowTitles.swift").unlink(missing_ok=True)
+    write("SwitcherWindowTitlesContract.swift", "import AppKit\nimport ApplicationServices\n"
+          + "extension SwitcherWindowTitleTests {\n"
+          + declaration("Sources/Vorssaint/Services/Switcher/SwitcherWindowTitles.swift",
+                        "final class SwitcherWindowTitles {")
+          + "}\n")
     write("SwitcherRememberedSelection.swift", "import AppKit\nimport ApplicationServices\n"
           + declaration("Sources/Vorssaint/Services/Switcher/SwitcherWindowInventory.swift",
                         "struct SwitcherInventorySpaces {")
@@ -216,6 +223,12 @@ def main():
           + "}\nextension SwitcherRememberedSelectionTests.WindowEvents {\n"
           + declaration("Sources/Vorssaint/Services/Switcher/SwitcherWindowEvents.swift",
                         "    static func matchesWindowNumber(")
+          + "}\nextension SwitcherRememberedSelectionTests.Inventory.WindowEnumerator {\n"
+          + declaration("Sources/Vorssaint/Services/Switcher/WindowEnumerator.swift",
+                        "    static func ownWindowID(")
+          + "}\nextension SwitcherRememberedSelectionTests.Inventory {\n"
+          + declaration("Sources/Vorssaint/Services/Switcher/SwitcherWindowInventory.swift",
+                        "    private func observeScreenChanges(").replace("private func", "func", 1)
           + "}\n")
     write("RecorderSystemAudioTapLifecycle.swift", "import CoreAudio\nimport Foundation\n"
           + "extension RecorderSystemAudioTapLifecycleTests {\nfinal class Tap: Fixture, @unchecked Sendable {\n"
@@ -479,12 +492,18 @@ def main():
               "    private struct AudioRoute", "    private struct PendingAudio", "    private enum DDCProbe"])
           + "final class Service: Fixture {\nstatic var shared = Service()\n"
           + "".join(declaration(brightness, prefix).replace("private func", "func", 1) for prefix in [
+              "    func syncWithPreferences(", "    func stop(",
+              "    private func invalidateSpeakerRoutes(",
+              "    private func cancelPendingAudio(",
               "    func requestSpeakers(", "    private func acceptsSpeakerTarget(", "    private func drainPendingAudio(",
-              "    private func isCurrentSpeakerChange(", "    private func writeSpeakers(",
+              "    private func isCurrentSpeakerChange(", "    private func confirmSliderWrite(",
+              "    private func writeSpeakers(",
               "    func monitorSpeakerOutput(", "    private func probeAudio("])
           + "}\n}\n"
           + "extension DisplaySpeakerVolumeTests.DDCWriter {\n"
           + declaration(brightness, "    private func ddcSend(").replace("private func", "func", 1)
+          + "}\nextension DisplaySpeakerVolumeTests.PreciseVolumeRollerService {\n"
+          + declaration("Sources/Vorssaint/Services/Audio/PreciseVolumeRollerService.swift", "    static func playVolumeFeedback(")
           + "}\n")
     write("BrightnessKeyRouting.swift", "import AppKit\nimport os\n"
           + "extension BrightnessKeyRoutingTests {\nfinal class Service: Fixture {\n"
@@ -1581,7 +1600,11 @@ def main():
     write("NotchNotice.swift", "import AppKit\n" + declaration(notch, "struct NotchNotice:"))
     agent_view = "Sources/Vorssaint/UI/Notch/NotchAgentsView.swift"
     write("NotchAgentLimitReading.swift", "import SwiftUI\nextension NotchAgentLimitReadingTests {\n"
-          + declaration(agent_view, "private struct NotchAgentLimitReading:").replace("private struct", "struct", 1)
+          # Seed chart selection in the offscreen host without sending pointer events.
+          + "".join(declaration(agent_view, "private struct " + name + ":").replace("private struct", "struct", 1)
+                    .replace("@State private var hovered: Date?", "@State var hovered: Date? = nil")
+                    for name in ["NotchAgentLimitReading", "NotchAgentTrendCard", "NotchAgentActivityCard",
+                                 "NotchAgentShareCard"])
           + declaration(agent_view, "private struct NotchAgentInlineLabel:")
           + "}\n")
     recorder = "Sources/Vorssaint/Services/Recorder/RecorderEditorController.swift"
@@ -2219,6 +2242,7 @@ def main():
                                    "    private func moveIconRowSelection(", "    private func printableSearchText(",
                                    "    private func sanitizedSearchInput(", "    private func appendSearchText(",
                                    "    private func removeLastSearchCharacter(", "    private func applySearchFilter(",
+                                   "    private func updateSessionTitles(",
                                    "    private func pinSearch(", "    func closeWindow(",
                                    "    private func closeSelectedWindow(", "    private func finishClosingWindow(",
                                    "    private func applyClosedWindowRemoval(", "    private func finishTrackingClose(",
@@ -3055,8 +3079,8 @@ def main():
 
     write("AgentUsageEventDelivery.swift", "import Foundation\n"
           + "extension AgentUsageEventDeliveryTests {\nfinal class Host: Fixture {\n"
-          + declaration("Sources/Vorssaint/Services/AgentUsage/AgentUsageService.swift",
-                        "    private func report(").replace("private func", "func", 1)
+          + "".join(declaration("Sources/Vorssaint/Services/AgentUsage/AgentUsageService.swift", prefix)
+                    .replace("private func", "func", 1) for prefix in ["    private func report(", "    private func checkBudget("])
           + "}\n}\n")
 
     write("ScrollingTitleMotion.swift", "import Foundation\n"
@@ -3067,6 +3091,8 @@ def main():
 
     write("AgentUsageArchiveSave.swift", "import Foundation\n"
           + "extension AgentUsageArchiveSaveTests {\nfinal class Host: Fixture {\n"
+          + declaration("Sources/Vorssaint/Services/AgentUsage/AgentUsageService.swift",
+                        "    private var progressMark:").replace("private var", "var", 1)
           + declaration("Sources/Vorssaint/Services/AgentUsage/AgentUsageService.swift",
                         "    private func saveProgress(").replace("private func", "func", 1)
           + "}\n}\n")

@@ -22,17 +22,35 @@ enum DisplaySpeakerVolumeTests {
         var isActive = true
         var audio: Audio?
     }
-    enum AppVolumeMixer {
+    struct AppVolumeMixer {
+        static let shared = Self()
+        func refreshMonitorOutput() { Service.shared.onDisplayChange?() }
         static func hasSettableOutputVolume(for device: AudioObjectID) -> Bool { Service.shared.settable }
+    }
+    enum AppFeature {
+        case brightness
+        var isAvailable: Bool { true }
+    }
+    struct PreciseVolumeRollerService {
+        typealias UserDefaults = DisplaySpeakerVolumeTests.UserDefaults
+        struct Sound {
+            func stop() {}
+            func play() { Service.shared.clicks += 1 }
+        }
+        static let volumeFeedback: Sound? = Sound()
+        static let shared = Self()
+        func syncWithPreferences() {}
     }
     enum UserDefaults {
         static let standard = UserDefaults.self
         static func bool(forKey key: String) -> Bool {
-            key == DefaultsKey.displayVolumeKeysEnabled && Service.shared.wantsMonitorVolumeKeys
+            if key == "com.apple.sound.beep.feedback" { return Service.shared.feedbackEnabled }
+            if key == DefaultsKey.brightnessControlEnabled { return Service.shared.brightnessControlsEnabled }
+            return key == DefaultsKey.displayVolumeKeysEnabled && Service.shared.wantsMonitorVolumeKeys
         }
     }
     static func CGDisplayIsActive(_ id: UInt32) -> UInt32 { 1 }
-    static func CGDisplayIsAsleep(_ id: UInt32) -> UInt32 { 0 }
+    static func CGDisplayIsAsleep(_ id: UInt32) -> UInt32 { Service.shared.displayIsAsleep ? 1 : 0 }
     struct Write: Equatable {
         let code: UInt8
         let value: UInt16
@@ -59,10 +77,13 @@ enum DisplaySpeakerVolumeTests {
         let stateLock = NSLock()
         let workQueue = Queue()
         var running = true
+        var brightnessControlsEnabled = true
+        var rebuildGeneration = 0
         var wantsMonitorVolume = true
         var wantsMonitorVolumeKeys = true
         var monitorVolumeKeySettings = MonitorVolumeKeySettings()
         var displayPowerIsSuspended = false
+        var displayIsAsleep = false
         var displays: [BrightnessDisplay] = [] { didSet { onDisplayChange?() } }
         var onDisplayChange: (() -> Void)?
         var hiddenDisplays: [(id: UInt32, name: String)] = []
@@ -73,7 +94,11 @@ enum DisplaySpeakerVolumeTests {
         var pendingSpeakerUnmutes: [String: UInt64] = [:]
         var speakerRestoreLevels: [String: BrightnessSupport.SpeakerLevel] = [:]
         var audioLifetime: UInt64 = 0
+        var disabledSpeakerLifetime: UInt64?
+        var scannedAudio = false
+        var audioScanQueued: Bool?
         var speakerLevelRevisions: [String: UInt64] = [:]
+        var speakerSliderIntents: [String: SpeakerSliderFeedback.Request] = [:]
         var pendingAudio: [PendingAudio] = []
         var audioWriteInFlight = false
         var audioOutputGeneration = 0
@@ -86,6 +111,7 @@ enum DisplaySpeakerVolumeTests {
         var unmutedReads: UInt16 = 2
         var rejectUnmute = false
         var rejectVolume = false
+        var rejectVolumeRead = false
         var ignoreVolume = false
         var ignoreMute = false
         var onSend: (() -> Void)?
@@ -93,9 +119,13 @@ enum DisplaySpeakerVolumeTests {
         var afterUnmute: (() -> Void)?
         var onRead: ((UInt8) -> Void)?
         var displayFingerprint = "fixture-identity"
+        var connectedSpeakerEndpointID: UInt64 = 1
+        var onEndpointLookup: (() -> Void)?
         var volumeOnUnmute: UInt16?
         var writes: [Write] = []
         var writtenIDs: [UInt32] = []
+        var feedbackEnabled = true
+        var clicks = 0
         var refreshes = 0
         var silentPaths: Set<String> = []
         var chips: [UInt32] = []
@@ -104,6 +134,26 @@ enum DisplaySpeakerVolumeTests {
             (Service.shared.actualDevice, Service.shared.selectedAudioOutput?.name ?? "", kAudioDeviceTransportTypeHDMI)
         }
         static func restorationDisplayFingerprint(_ id: UInt32) -> String? { Service.shared.displayFingerprint }
+        static func speakerEndpointIsConnected(_ id: UInt64?) -> Bool {
+            let found = Service.shared.connectedSpeakerEndpointID == id
+            Service.shared.onEndpointLookup?()
+            return found
+        }
+        func start() { running = true }
+        func tearDownDisplayControls() {
+            running = false
+            removeAudioOutputObserver()
+            displays = []
+        }
+        func syncKeyTap() {}
+        func syncKeyboardBrightnessHotkeys() {}
+        func syncDisplayBrightnessHotkeys() {}
+        func installAudioOutputObserver() {}
+        func removeAudioOutputObserver() {
+            guard selectedAudioOutput != nil else { return }
+            audioOutputGeneration += 1
+            selectedAudioOutput = nil
+        }
         func refresh(force: Bool) { refreshes += 1 }
         func rescanForUnclaimedVolumeKey() { refreshes += 1 }
         func rememberedPaths(_ key: String) -> Set<String> { silentPaths }
@@ -113,7 +163,9 @@ enum DisplaySpeakerVolumeTests {
             guard whileCurrent() else { return .dead }
             chips.append(chip)
             onRead?(code)
-            if code == BrightnessSupport.audioVolumeCode { return .replied(current: raw, maximum: maximum) }
+            if code == BrightnessSupport.audioVolumeCode {
+                return rejectVolumeRead ? .dead : .replied(current: raw, maximum: maximum)
+            }
             guard code == BrightnessSupport.audioMuteCode, let nativeMuted else { return .dead }
             return .replied(current: nativeMuted ? 1 : unmutedReads, maximum: 2)
         }
@@ -140,8 +192,7 @@ enum DisplaySpeakerVolumeTests {
             afterSend = nil
             after?()
             // The first DDC cycle reached the monitor. The next can lose its route.
-            if code == BrightnessSupport.audioMuteCode, value == 2 { return whileCurrent() || acceptPartialWrite }
-            return true
+            return whileCurrent() || acceptPartialWrite
         }
         func finish() {
             while !workQueue.jobs.isEmpty || !DispatchQueue.main.jobs.isEmpty {
@@ -154,7 +205,8 @@ enum DisplaySpeakerVolumeTests {
     @discardableResult
     static func connect(_ mixer: MixerOutputAdjustmentContract.Mixer,
                         raw: UInt16 = 40, maximum: UInt16 = 100, muted: Bool? = false,
-                        unmutedReads: UInt16 = 2, chip: UInt32 = BrightnessSupport.chipAddress) -> Service {
+                        unmutedReads: UInt16 = 2, chip: UInt32 = BrightnessSupport.chipAddress,
+                        registryEntryID: UInt64? = 1) -> Service {
         let service = Service()
         Service.shared = service
         service.raw = raw
@@ -164,8 +216,10 @@ enum DisplaySpeakerVolumeTests {
         let endpoint = NSObject()
         if let probed = service.probeAudio(for: 7, service: endpoint, chip: chip, path: "port-a") {
             service.audioRoutes[7] = AudioRoute(path: "port-a", fingerprint: service.displayFingerprint,
-                                                service: endpoint, chipAddress: chip, hasNativeMute: probed.hasNativeMute,
+                                                service: endpoint, registryEntryID: registryEntryID,
+                                                chipAddress: chip, hasNativeMute: probed.hasNativeMute,
                                                 unmutesLeavingZero: probed.unmutesLeavingZero)
+            service.scannedAudio = true
             service.displays = [BrightnessDisplay(id: 7, name: "Monitor A", audio: probed.state)]
         }
         service.onDisplayChange = { [weak service, weak mixer] in mixer?.monitorOutput = service?.monitorSpeakerOutput() }
@@ -197,8 +251,265 @@ enum DisplaySpeakerVolumeTests {
                      "a rejected unmute never counts as an accepted write when its repeat is cancelled")
     }
 
+    private static func checkSliderFeedback(_ suite: TestSuite) {
+        let mixer = MixerOutputAdjustmentContract.Mixer()
+        let target = BrightnessSupport.SpeakerTarget(displayID: 7, path: "port-a")
+        let feedback = SpeakerSliderFeedback()
+        var service = connect(mixer)
+        func set(_ volume: Double, completion: @escaping (Bool) -> Void = { _ in }) {
+            service.requestSpeakers(.set(volume: volume, muted: nil), target: target,
+                                    sliderFeedback: feedback.request(), completion: completion)
+        }
+        for releaseFirst in [false, true] {
+            for (muted, unmutedReads): (Bool?, UInt16) in [(true, 2), (nil, 2), (false, 0)] {
+                service = connect(mixer, raw: 0, muted: muted, unmutedReads: unmutedReads)
+                service.wantsMonitorVolumeKeys = releaseFirst
+                service.monitorVolumeKeySettings = .init(maximumPercent: 5)
+                feedback.editingChanged(true)
+                set(0.6)
+                if releaseFirst { feedback.editingChanged(false) } else { service.finish() }
+                suite.expect(service.clicks == 0, "the speaker slider waits for both release and confirmation")
+                // Only the selected output changed. This row still controls the same monitor.
+                service.removeAudioOutputObserver()
+                service.actualDevice = 32
+                if releaseFirst { service.finish() } else { feedback.editingChanged(false) }
+                feedback.editingChanged(false)
+                suite.expect(service.raw == 60 && service.clicks == 1,
+                             "native mute, volume-only and zero-latched monitors click once on a manual adjustment")
+            }
+        }
+
+        for (level, raw): (Double, UInt16) in [(0, 0), (1, 10), (0.41, 4)] {
+            service = connect(mixer, raw: raw, maximum: 10, muted: nil)
+            feedback.editingChanged(true)
+            set(level)
+            feedback.editingChanged(false)
+            service.finish()
+            suite.expect(service.writes.isEmpty && service.clicks == 0,
+                         "an endpoint or a rounded value already on the monitor makes no sound")
+        }
+        service = connect(mixer)
+        feedback.editingChanged(true)
+        feedback.editingChanged(false)
+        suite.expect(service.clicks == 0, "releasing without setting any volume stays silent")
+        set(0.7)
+        service.finish()
+        suite.expect(service.raw == 70 && service.clicks == 1,
+                     "a keyboard or accessibility adjustment without drag callbacks clicks after confirmation")
+        service.feedbackEnabled = false
+        set(0.8)
+        service.finish()
+        suite.expect(service.raw == 80 && service.clicks == 1, "disabling the system sound leaves a confirmed change silent")
+
+        service = connect(mixer)
+        feedback.editingChanged(true)
+        var replaced: [Bool] = []
+        set(0.5)
+        set(0.6) { replaced.append($0) }
+        set(0.7)
+        suite.expect(replaced == [false] && service.clicks == 0, "a coalesced setter completes synchronously")
+        feedback.editingChanged(false)
+        service.finish()
+        suite.expect(service.writes == [Write(BrightnessSupport.audioVolumeCode, 70)] && service.clicks == 1,
+                     "the newest setter survives the superseded callback without writing again on release")
+        feedback.editingChanged(true)
+        set(0.8)
+        service.finish()
+        set(0.801)
+        feedback.editingChanged(false)
+        service.finish()
+        suite.expect(service.clicks == 2 && service.writes.count == 2,
+                     "a final setter on the same hardware step preserves the drag's single confirmed change")
+
+        for (beforeReadback, rejectFinalRead) in [(false, false), (true, false), (false, true)] {
+            service = connect(mixer)
+            feedback.editingChanged(true)
+            if beforeReadback { service.afterSend = { set(0.801) } }
+            set(0.8)
+            service.workQueue.runOne()
+            if !beforeReadback { set(0.801) }
+            service.rejectVolumeRead = rejectFinalRead
+            feedback.editingChanged(false)
+            service.finish()
+            suite.expect(service.clicks == (rejectFinalRead ? 0 : 1) && service.raw == 80
+                         && service.writes == [Write(BrightnessSupport.audioVolumeCode, 80)],
+                         "an in-flight change requires the last setter's readback (before readback: \(beforeReadback), read fails: \(rejectFinalRead))")
+        }
+
+        service = connect(mixer)
+        feedback.editingChanged(true)
+        set(0.7)
+        service.finish()
+        service.requestSpeakers(.set(volume: 0.8, muted: nil), target: target)
+        service.finish()
+        set(0.801)
+        feedback.editingChanged(false)
+        service.finish()
+        suite.expect(service.clicks == 0 && service.writes.map(\.value) == [70, 80],
+                     "a final no-op cannot borrow an earlier drag change superseded by another control")
+
+        service = connect(mixer)
+        feedback.editingChanged(true)
+        set(0.5)
+        service.finish()
+        service.wantsMonitorVolume = false
+        var refused: Bool?
+        set(0.7) { refused = $0 }
+        service.wantsMonitorVolume = true
+        feedback.editingChanged(false)
+        suite.expect(refused == false && service.clicks == 0 && service.writes.count == 1,
+                     "a synchronously refused final setter revokes the earlier success before release")
+
+        for invalidate: (Service) -> Void in [
+            { $0.displays = [] }, { $0.invalidateSpeakerRoutes() }, { _ in feedback.cancel() },
+            { $0.displayFingerprint = "another-monitor" }, { $0.displayIsAsleep = true },
+            { $0.requestSpeakers(.set(volume: nil, muted: true), target: target) }
+        ] {
+            service = connect(mixer)
+            feedback.editingChanged(true)
+            set(0.7)
+            service.finish()
+            invalidate(service)
+            feedback.editingChanged(false)
+            service.finish()
+            suite.expect(service.clicks == 0, "a removed target, cancelled edit or newer intent revokes a waiting click")
+        }
+        service = connect(mixer)
+        feedback.editingChanged(true)
+        set(0.7)
+        feedback.editingChanged(false)
+        feedback.editingChanged(true)
+        service.finish()
+        feedback.editingChanged(false)
+        suite.expect(service.clicks == 0, "starting another drag invalidates a released edit awaiting its readback")
+        for interrupt: (Service) -> Void in [
+            { $0.rejectVolume = true }, { $0.ignoreVolume = true }, { $0.maximum = 0 },
+            { $0.wantsMonitorVolume = false }, { $0.invalidateSpeakerRoutes() }, { _ in feedback.cancel() }
+        ] {
+            service = connect(mixer)
+            feedback.editingChanged(true)
+            set(0.5)
+            service.finish()
+            set(0.7)
+            feedback.editingChanged(false)
+            interrupt(service)
+            service.finish()
+            suite.expect(service.clicks == 0,
+                         "a failed or cancelled final level stays silent even after an earlier level succeeded")
+        }
+        service = connect(mixer, raw: 0, muted: false, unmutedReads: 0)
+        service.rejectUnmute = true
+        feedback.editingChanged(true)
+        set(0.5)
+        feedback.editingChanged(false)
+        service.finish()
+        suite.expect(service.raw == 50 && service.clicks == 0,
+                     "accepting the new volume but failing to release the zero latch cannot sound a click")
+    }
+
+    private static func checkSliderEndpointChanges(_ suite: TestSuite) {
+        enum Rescan { case beforeFinalRequest, beforeFinalRead, beforeRelease }
+        let mixer = MixerOutputAdjustmentContract.Mixer()
+        let target = BrightnessSupport.SpeakerTarget(displayID: 7, path: "port-a")
+        let volume = BrightnessSupport.audioVolumeCode
+        let chip = BrightnessSupport.chipAddress
+        let routes: [(firstID: UInt64?, scannedID: UInt64?, address: UInt32)] = [
+            (1, 2, chip), (1, 1, chip), (nil, nil, chip), (1, 1, BrightnessSupport.hdmiConverterChipAddress)
+        ]
+        func rescan(_ service: Service, id: UInt64?, address: UInt32) {
+            // A fresh AV service wrapper can describe the same endpoint or its
+            // replacement. Both monitors report 80 on this port and display ID.
+            service.connectedSpeakerEndpointID = id ?? 0
+            service.audioRoutes[target.displayID] = AudioRoute(path: target.path, fingerprint: service.displayFingerprint,
+                service: NSObject(), registryEntryID: id, chipAddress: address,
+                hasNativeMute: true, unmutesLeavingZero: false)
+            service.raw = 80
+        }
+        for timing in [Rescan.beforeFinalRequest, .beforeFinalRead, .beforeRelease] {
+            for (firstID, scannedID, address) in routes {
+                let service = connect(mixer, registryEntryID: firstID)
+                let feedback = SpeakerSliderFeedback()
+                func set(_ value: Double) {
+                    service.requestSpeakers(.set(volume: value, muted: nil), target: target,
+                                            sliderFeedback: feedback.request())
+                }
+                feedback.editingChanged(true)
+                set(0.8)
+                service.finish()
+                if timing == .beforeFinalRequest { rescan(service, id: scannedID, address: address) }
+                set(0.801)
+                if timing == .beforeFinalRead { rescan(service, id: scannedID, address: address) }
+                service.finish()
+                if timing == .beforeRelease { rescan(service, id: scannedID, address: address) }
+                feedback.editingChanged(false)
+                let sameEndpoint = firstID != nil && firstID == scannedID && address == chip
+                suite.expect(service.writes == [Write(volume, 80)] && service.clicks == (sameEndpoint ? 1 : 0),
+                             "a rounded final read can confirm only its original endpoint (\(firstID as Any) → \(scannedID as Any), address \(address), \(timing))")
+                if timing == .beforeFinalRequest, scannedID == 2 {
+                    let priorClicks = service.clicks
+                    feedback.editingChanged(true)
+                    set(0.65)
+                    feedback.editingChanged(false)
+                    service.finish()
+                    suite.expect(service.writes == [Write(volume, 80), Write(volume, 65)] && service.clicks == priorClicks + 1,
+                                 "the replacement monitor can confirm and sound its own slider write")
+                }
+            }
+        }
+        let feedback = SpeakerSliderFeedback()
+        for (roundedFinalValue, freshWrapper) in [(false, false), (true, false), (false, true)] {
+            let service = connect(mixer, registryEntryID: nil)
+            feedback.editingChanged(true)
+            service.requestSpeakers(.set(volume: 0.8, muted: nil), target: target, sliderFeedback: feedback.request())
+            service.finish()
+            if roundedFinalValue {
+                service.requestSpeakers(.set(volume: 0.801, muted: nil), target: target, sliderFeedback: feedback.request())
+                service.finish()
+            }
+            if freshWrapper { rescan(service, id: nil, address: chip) }
+            feedback.editingChanged(false)
+            suite.expect(service.writes == [Write(volume, 80)] && service.clicks == 1,
+                         "a confirmed write still clicks without a registry entry ID (rounded final: \(roundedFinalValue), fresh wrapper: \(freshWrapper))")
+        }
+
+        let unplugged = connect(mixer)
+        feedback.editingChanged(true)
+        unplugged.requestSpeakers(.set(volume: 0.8, muted: nil), target: target, sliderFeedback: feedback.request())
+        unplugged.finish()
+        unplugged.connectedSpeakerEndpointID = 2
+        feedback.editingChanged(false)
+        suite.expect(unplugged.writes == [Write(volume, 80)] && unplugged.clicks == 0,
+                     "unplugging the confirmed endpoint before the route refresh revokes the release click")
+
+        let releaseRoutes: [(first: UInt64?, current: UInt64?, lookup: UInt64?, matches: Bool)] = [
+            (nil, nil, nil, true), (nil, 2, 2, true), (1, nil, 1, true), (1, 0, 1, true),
+            (1, 1, 1, true), (1, 2, nil, false)
+        ]
+        for (first, current, lookup, matches) in releaseRoutes {
+            for connected in [false, true] {
+                let service = connect(mixer, registryEntryID: first)
+                feedback.editingChanged(true)
+                service.requestSpeakers(.set(volume: 0.8, muted: nil), target: target, sliderFeedback: feedback.request())
+                service.finish()
+                rescan(service, id: current, address: chip)
+                service.connectedSpeakerEndpointID = connected ? (lookup ?? current ?? 1) : 0
+                let commands = service.chips.count
+                var lookups = 0
+                service.onEndpointLookup = { lookups += 1 }
+                feedback.editingChanged(false)
+                service.finish()
+                let plays = matches && (lookup == nil || connected)
+                suite.expect(lookups == (lookup == nil ? 0 : 1) && service.clicks == (plays ? 1 : 0)
+                             && service.writes == [Write(volume, 80)] && service.chips.count == commands,
+                             "release validates the available registry ID without DDC (\(first as Any) → \(current as Any), connected: \(connected))")
+            }
+        }
+    }
+
     static func run(_ suite: TestSuite) {
         checkInterruptedDDCWrites(suite)
+        checkSliderFeedback(suite)
+        checkSliderEndpointChanges(suite)
         suite.expect(BrightnessSupport.audioReply(current: 50, maximum: 100) == 0.5
                      && BrightnessSupport.audioReply(current: 100, maximum: 100) == 1,
                      "a volume reply is read against its own maximum")
