@@ -30,8 +30,10 @@ final class MicMuteService: ObservableObject {
     /// well so an input that reuses a departed device's ID gets a fresh listener.
     private var deviceListeners: [DeviceListener: (uid: String, lifetime: ListenerLifetime)] = [:]
     private var listenersToRenew: Set<DeviceListener> = []
-    private var previousInventory: InputInventory?
-    private var observedDeviceListChange: UInt64 = 0
+    private var observedDeviceListChange: UInt64?
+    /// Nil before the initial mute subscribes. After a topology change, an
+    /// input becomes eligible for a quiet baseline only after registration.
+    private var observedInputs: Set<InputDevice>?
     /// Reading or writing a device property can block for as long as the audio
     /// daemon holds the device (a headset connecting, an interface waking),
     /// and that is exactly the moment the listeners fire. Sweeping every
@@ -280,26 +282,20 @@ final class MicMuteService: ObservableObject {
     /// listener gets the next turn without this sweep writing over the change.
     private func callAppOpenedInput(in devices: inout [InputDevice], owned: Set<String>,
                                     readings: inout [InputDevice: InputControls]) -> Bool {
-        var opened: [InputDevice] = []
-        for device in devices {
-            guard let previous = quietInputs[device], owned.contains(device.uid) else { continue }
+        func opened(_ device: InputDevice) -> Bool {
+            guard let previous = quietInputs[device], owned.contains(device.uid) else { return false }
             let current = Self.inputControls(device.id, readSwitch: true)
             readings[device] = current
-            if current.opened(since: previous) { opened.append(device) }
+            return current.opened(since: previous)
         }
-        guard !opened.isEmpty else { return false }
+        let candidates = devices.filter { opened($0) }
+        guard !candidates.isEmpty else { return false }
         let captured = Self.devicesCapturedByOtherProcesses()
         // IDs can be reused while the audio server answers. Both the decision
         // and the subsequent writes must address the devices that are here now.
         devices = Self.inputDevices()
         let present = Set(devices)
-        for device in opened where present.contains(device) && captured.contains(device.id) {
-            guard let previous = quietInputs[device] else { continue }
-            let current = Self.inputControls(device.id, readSwitch: true)
-            readings[device] = current
-            if current.opened(since: previous) { return true }
-        }
-        return false
+        return candidates.contains { present.contains($0) && captured.contains($0.id) && opened($0) }
     }
 
     // MARK: - Applying
@@ -360,6 +356,8 @@ final class MicMuteService: ObservableObject {
         let mutedDevices = defaults.stringArray(forKey: DefaultsKey.micMuteMutedDevices)
         if serviceRestarted {
             quietInputs.removeAll()
+            observedInputs = []
+            observedDeviceListChange = nil
             updateRetries([:])
             observationGeneration = audioGeneration
             cancelInventoryRecovery()
@@ -368,19 +366,21 @@ final class MicMuteService: ObservableObject {
         }
         let listChange = callbackLock.withLock { deviceListChange }
         let inventory = Self.inputInventory()
-        if serviceRestarted || !requestedMute { previousInventory = nil }
-        if requestedMute { observeDeviceList(inventory, change: listChange) }
+        let initialMute = requestedMute && observedDeviceListChange == nil && observedInputs == nil
+        let renewingListeners = requestedMute && observeDeviceList(change: listChange)
         var devices = inventory?.devices ?? []
         let trackControls = requestedMute && defaults.bool(forKey: DefaultsKey.micMuteFollowCallApps)
             && canFollowCallApps(in: audioGeneration)
         var readings: [InputDevice: InputControls] = [:]
         var follow = false
+        // Old callbacks carry the same client, object and address as the new
+        // registration. Establish silence after renewal before following an opening.
         if trackControls, let followRequest, !quietInputs.isEmpty,
            callAppOpenedInput(in: &devices, owned: Set(mutedDevices ?? []), readings: &readings) {
             // A newer explicit request or disabling the opt-in wins while the HAL is busy.
             follow = canFollowCallApps(in: audioGeneration) && defaults.bool(forKey: DefaultsKey.micMuteFollowCallApps)
-                && callbackLock.withLock { deviceListChange == listChange }
                 && inputVolumeLock.withLock { inputVolumeLifetime == followRequest }
+                && callbackLock.withLock { deviceListChange == listChange }
         }
         let muted = requestedMute && !follow
         let legacyVolume = defaults.double(forKey: DefaultsKey.micMuteSavedVolume)
@@ -390,9 +390,12 @@ final class MicMuteService: ObservableObject {
                                 savedChannelVolumes: savedChannelVolumes ?? [:], savedControls: savedControls ?? [:],
                                 mutedDevices: mutedDevices, legacyVolume: legacyVolume,
                                 trackControls: trackControls, readings: readings)
-            // The first mute of an input can finish before its listener is
-            // installed. Recheck once after subscribing to cover that interval.
-            outcome.checkNewInputs = outcome.quietInputs.keys.contains { quietInputs[$0] == nil }
+            if !initialMute {
+                outcome.quietInputs = outcome.quietInputs.filter { observedInputs?.contains($0.key) == true }
+            }
+            // A control can open between the mute and its listener's installation
+            // or renewal. Recheck once after subscribing to cover that interval.
+            outcome.checkNewInputs = renewingListeners || (initialMute && !outcome.quietInputs.isEmpty)
             quietInputs = outcome.quietInputs
         } else {
             outcome = Self.unmute(devices, savedVolumes: savedVolumes ?? [:],
@@ -401,6 +404,8 @@ final class MicMuteService: ObservableObject {
             outcome.followedCallApp = follow
             if outcome.applied || !keepRetriesIfUnmuteFails {
                 quietInputs.removeAll()
+                observedInputs = nil
+                observedDeviceListChange = nil
             } else {
                 // A failed restore can still change individual controls. Keep
                 // only quiet inputs still present, with their actual switch state.
@@ -855,7 +860,6 @@ final class MicMuteService: ObservableObject {
 
     private struct InputInventory {
         var devices: [InputDevice] = []
-        var listedIDs: Set<AudioDeviceID> = []
         var unresolvedIDs: Set<AudioDeviceID> = []
         var inactiveIDs: Set<AudioDeviceID> = []
     }
@@ -876,7 +880,6 @@ final class MicMuteService: ObservableObject {
                                          &address, 0, nil, &size, &deviceIDs) == noErr else { return nil }
 
         for deviceID in deviceIDs.prefix(Int(size) / MemoryLayout<AudioDeviceID>.size) {
-            inventory.listedIDs.insert(deviceID)
             guard let hasStreams = hasInputStreams(deviceID) else {
                 inventory.unresolvedIDs.insert(deviceID)
                 continue
@@ -999,7 +1002,8 @@ final class MicMuteService: ObservableObject {
         // A channel switch only silences that channel. Without an engaged
         // main switch, every input channel needs a readable, engaged switch.
         var allMuted = true
-        for channel in 1...max(inputChannelCount(of: device), 1) {
+        let channels = 1...UInt32(clamping: max(inputChannelCount(of: device), 1))
+        for channel in channels {
             var address = main
             address.mElement = AudioObjectPropertyElement(channel)
             guard AudioObjectHasProperty(device, &address) else {
@@ -1017,8 +1021,7 @@ final class MicMuteService: ObservableObject {
             }
         }
         if allMuted { return 1 }
-        if unreadable { return nil }
-        return sawOpenSwitch ? 0 : nil
+        return sawOpenSwitch && !unreadable ? 0 : nil
     }
 
     /// Legacy restores have no per-control snapshot. Even then, success
@@ -1303,28 +1306,28 @@ final class MicMuteService: ObservableObject {
         kAudioDevicePropertyVolumeScalar,
     ]
 
-    /// A device-list change can cover an unplug and reconnect between reads.
-    /// If the final inventory cannot account for the notifications, a reused
-    /// ID and UID do not prove that its old listeners or quiet readings survived.
-    private func observeDeviceList(_ inventory: InputInventory?, change: UInt64) {
-        guard previousInventory == nil || change != observedDeviceListChange,
-              let inventory, inventory.unresolvedIDs.isEmpty else { return }
-        if let previousInventory, change &- observedDeviceListChange > 1
-            || (inventory.listedIDs == previousInventory.listedIDs
-                && Set(inventory.devices) == Set(previousInventory.devices)) {
-            listenersToRenew.formUnion(deviceListeners.keys)
-            quietInputs.removeAll()
-        }
-        previousInventory = inventory
-        observedDeviceListChange = change
+    /// Even a complete list can hide a same-ID reconnect alongside another
+    /// device's arrival. Renew once per batch of device-list notifications.
+    private func observeDeviceList(change: UInt64) -> Bool {
+        defer { observedDeviceListChange = change }
+        guard let previous = observedDeviceListChange, change != previous else { return false }
+        listenersToRenew.formUnion(deviceListeners.keys)
+        observedInputs = []
+        quietInputs.removeAll()
+        return true
     }
 
-    /// Runs on `halQueue`. Keep working listeners in place while the input
-    /// and its controls stay the same, including across mute reassertions.
+    /// Runs on `halQueue`. Between device-list notifications, leave working
+    /// listeners in place when the input and its controls stay the same.
     private func syncDeviceListeners(muted: Bool) {
         let generation = currentAudioGeneration
-        // A failed device-list read is not a disconnect.
-        guard let inventory = muted ? Self.inputInventory() : InputInventory() else { return }
+        // Keep existing registrations on a failed read. A later successful
+        // reconciliation and quiet reading must precede any automatic unmute.
+        guard let inventory = muted ? Self.inputInventory() : InputInventory() else {
+            observedInputs = []
+            quietInputs.removeAll()
+            return
+        }
         var wanted: [DeviceListener: String] = [:]
         // A listed object whose input streams or identity cannot be read may
         // still be our microphone. Its next callback can complete discovery.
@@ -1399,8 +1402,11 @@ final class MicMuteService: ObservableObject {
                 watch(kAudioDevicePropertyDeviceIsRunningSomewhere, scope: kAudioObjectPropertyScopeGlobal)
             }
         }
+        // Keep a listed but unreadable device's current listener until its
+        // identity is known and its replacement can be registered.
         for (listener, registration) in deviceListeners where wanted[listener] != registration.uid
-            || !registration.lifetime.isCurrent(generation) || listenersToRenew.contains(listener) {
+            || !registration.lifetime.isCurrent(generation)
+            || (listenersToRenew.contains(listener) && !inventory.unresolvedIDs.contains(listener.device)) {
             var address = listener.address
             if retireListener(registration.lifetime, on: listener.device, at: &address) {
                 deviceListeners.removeValue(forKey: listener)
@@ -1413,5 +1419,25 @@ final class MicMuteService: ObservableObject {
                 deviceListeners[listener] = (uid, lifetime)
             }
         }
+        // A missed registration, including a renewal whose removal failed,
+        // cannot establish a connection for call following. After a repair,
+        // read the gain again with the new listeners already installed.
+        var observed = Set<AudioDeviceID>()
+        var incomplete = Set<AudioDeviceID>()
+        for (listener, uid) in wanted {
+            guard let registration = deviceListeners[listener], registration.uid == uid,
+                  registration.lifetime.isCurrent(generation), !listenersToRenew.contains(listener) else {
+                incomplete.insert(listener.device)
+                continue
+            }
+            if Self.watchedDeviceSelectors.contains(listener.selector) {
+                observed.insert(listener.device)
+            }
+        }
+        let ready = Set(inventory.devices.filter { observed.contains($0.id) && !incomplete.contains($0.id) })
+        let needsCheck = observedInputs.map { !ready.isSubset(of: $0) } ?? false
+        observedInputs = muted ? ready : nil
+        quietInputs = quietInputs.filter { ready.contains($0.key) }
+        if needsCheck { scheduleReapply() }
     }
 }

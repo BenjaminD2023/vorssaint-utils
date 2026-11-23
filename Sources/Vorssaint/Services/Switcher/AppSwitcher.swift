@@ -167,6 +167,7 @@ final class AppSwitcher: ObservableObject {
     private var iconRowEdgeHoverWork: DispatchWorkItem?
     private var iconRowEdgeHoverIndex: Int?
     private var iconRowLastBouncedIndex: Int?
+    private var previewCaptureTask: Task<Void, Never>?
     private var pendingPreviewUpdates: [CGWindowID: CGImage] = [:]
     private var previewBatchWorkItem: DispatchWorkItem?
 
@@ -270,6 +271,7 @@ final class AppSwitcher: ObservableObject {
             let panel = ensurePanel()
             panel.contentViewController?.view.layoutSubtreeIfNeeded()
             if !capturesPreviews {
+                cancelSessionPreviews()
                 WindowPreviewProvider.shared.stopWarming()
             } else {
                 WindowPreviewProvider.shared.startWarming()
@@ -1308,15 +1310,7 @@ final class AppSwitcher: ObservableObject {
             return
         }
         scheduleShowPanel { [weak self] in
-            guard let self, self.capturesPreviews, self.sessionActive,
-                  self.routeLock.withLock({ self.sessionStartGeneration == generation }) else { return }
-            WindowPreviewProvider.shared.refreshPreviews(for: list, maxPixelSize: 640 * PreviewSizing.switcherScale,
-                                                        excludedAppsKey: DefaultsKey.switcherPreviewExcludedApps) { [weak self] windowID, image in
-                guard let self, self.sessionActive,
-                      self.routeLock.withLock({ self.sessionStartGeneration == generation }),
-                      self.sessionItems.contains(where: { $0.previewWindowID == windowID }) else { return }
-                self.enqueuePreviewUpdate(windowID: windowID, image: image)
-            }
+            self?.refreshSessionPreviews(for: list, generation: generation)
         }
     }
 
@@ -1869,6 +1863,7 @@ final class AppSwitcher: ObservableObject {
     }
 
     private func endSession() {
+        cancelSessionPreviews()
         stopObservingTermination()
         cancelLetterConfirmation()
         SwitcherAppIconCache.endSession()
@@ -1876,7 +1871,6 @@ final class AppSwitcher: ObservableObject {
         invalidateSecureInputReplays()
         pendingShow?.cancel()
         pendingShow = nil
-        cancelPendingPreviewBatch()
         panel?.orderOut(nil)
         unregisterSecureInputActionHotKeys()
         sessionItems = []
@@ -1909,6 +1903,21 @@ final class AppSwitcher: ObservableObject {
         commitPendingForClose = false
     }
 
+    private func refreshSessionPreviews(for list: [SwitcherItem], generation: UInt64) {
+        guard capturesPreviews, sessionActive,
+              routeLock.withLock({ sessionStartGeneration == generation }) else { return }
+        previewCaptureTask?.cancel()
+        previewCaptureTask = WindowPreviewProvider.shared.refreshPreviews(
+            for: list, maxPixelSize: 640 * PreviewSizing.switcherScale,
+            excludedAppsKey: DefaultsKey.switcherPreviewExcludedApps
+        ) { [weak self] windowID, image in
+            guard let self, self.sessionActive,
+                  self.routeLock.withLock({ self.sessionStartGeneration == generation }),
+                  self.sessionItems.contains(where: { $0.previewWindowID == windowID }) else { return }
+            self.enqueuePreviewUpdate(windowID: windowID, image: image)
+        }
+    }
+
     private func enqueuePreviewUpdate(windowID: CGWindowID, image: CGImage) {
         pendingPreviewUpdates[windowID] = image
         guard previewBatchWorkItem == nil else { return }
@@ -1929,7 +1938,9 @@ final class AppSwitcher: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: work)
     }
 
-    private func cancelPendingPreviewBatch() {
+    private func cancelSessionPreviews() {
+        previewCaptureTask?.cancel()
+        previewCaptureTask = nil
         previewBatchWorkItem?.cancel()
         previewBatchWorkItem = nil
         pendingPreviewUpdates.removeAll()

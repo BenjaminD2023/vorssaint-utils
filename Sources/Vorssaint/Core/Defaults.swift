@@ -29,6 +29,7 @@ enum DefaultsKey {
     static let keepAwakeAllowDisplaySleep = "keepAwakeAllowDisplaySleep"
     static let keepAwakeExternalDisplay = "keepAwakeExternalDisplay"
     static let keepAwakeConnectedToPower = "keepAwakeConnectedToPower"
+    static let keepAwakePowerDisconnectDelay = "keepAwakePowerDisconnectDelaySeconds"
     static let keepAwakeRunningApps = "keepAwakeRunningApps"
     static let keepAwakeRunningAppBundleIDs = "keepAwakeRunningAppBundleIDs"
     // Match mode over the automation conditions: false is Any (one matching
@@ -1227,6 +1228,7 @@ enum Defaults {
     static let allowedDurations = [0, 15, 30, 60, 120, 240, 480]
     static let allowedKeepAwakeMouseJiggleIntervals = [1, 2, 5, 10, 15]
     static let allowedBatteryLimits = [0, 5, 10, 15, 20]
+    static let allowedKeepAwakePowerDisconnectDelays = Array(stride(from: 0, through: 60, by: 5))
     static let allowedMonitorIntervals = [1, 2, 5]
     static let defaultKeyboardDebounceWindowMs = 5
     static let defaultSnippetSoundName = "Tink"
@@ -1272,6 +1274,7 @@ enum Defaults {
         DefaultsKey.keepAwakeAllowDisplaySleep: false,
         DefaultsKey.keepAwakeExternalDisplay: false,
         DefaultsKey.keepAwakeConnectedToPower: false,
+        DefaultsKey.keepAwakePowerDisconnectDelay: 0,
         DefaultsKey.keepAwakeRunningApps: false,
         DefaultsKey.keepAwakeRunningAppBundleIDs: [String](),
         DefaultsKey.keepAwakeAutomationRequireAll: false,
@@ -2591,6 +2594,10 @@ enum Defaults {
 
     static func sanitizedChargeLimit(_ percent: Int) -> Int {
         ChargeControlPolicy.sanitizedLimit(percent)
+    }
+
+    static func sanitizedKeepAwakePowerDisconnectDelay(_ seconds: Int) -> Int {
+        allowedKeepAwakePowerDisconnectDelays.contains(seconds) ? seconds : 0
     }
 
     static func sanitizedKeepAwakeMouseJiggleInterval(_ minutes: Int) -> Int {
